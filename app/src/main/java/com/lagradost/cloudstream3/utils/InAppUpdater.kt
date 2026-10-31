@@ -252,7 +252,7 @@ object InAppUpdater {
     ): Boolean {
         val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
         val autoUpdateEnabled =
-            settingsManager.getBoolean(getString(R.string.auto_update_key), true)
+            settingsManager.getBoolean(getString(R.string.auto_update_key), false) // TV-LITE: manual updates only
         if (checkAutoUpdate && !autoUpdateEnabled) {
             return false
         }

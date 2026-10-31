@@ -29,7 +29,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.children
 import androidx.core.view.isNotEmpty
 import androidx.preference.PreferenceManager
-import com.google.android.gms.cast.framework.CastSession
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.navigationrail.NavigationRailView
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
@@ -42,7 +41,6 @@ import com.lagradost.cloudstream3.syncproviders.AccountManager
 import com.lagradost.cloudstream3.ui.home.HomeChildItemAdapter
 import com.lagradost.cloudstream3.ui.home.ParentItemAdapter
 import com.lagradost.cloudstream3.ui.player.PlayerPipHelper.isPIPPossible
-import com.lagradost.cloudstream3.ui.player.Torrent
 import com.lagradost.cloudstream3.ui.result.ActorAdaptor
 import com.lagradost.cloudstream3.ui.result.EpisodeAdapter
 import com.lagradost.cloudstream3.ui.result.ImageAdapter
@@ -62,7 +60,6 @@ import java.lang.ref.WeakReference
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
-import org.schabi.newpipe.extractor.NewPipe
 
 enum class FocusDirection {
     Start,
@@ -83,11 +80,6 @@ object CommonActivity {
     @MainThread
     fun setActivityInstance(newActivity: Activity?) {
         activity = newActivity
-    }
-
-    @MainThread
-    fun Activity?.getCastSession(): CastSession? {
-        return (this as MainActivity?)?.mSessionManager?.currentCastSession
     }
 
     val displayMetrics: DisplayMetrics = Resources.getSystem().displayMetrics
@@ -244,13 +236,11 @@ object CommonActivity {
 
     fun init(act: Activity) {
         setActivityInstance(act)
-        ioSafe { Torrent.deleteAllFiles() }
         val componentActivity = activity as? ComponentActivity ?: return
 
         componentActivity.updateLocale()
         componentActivity.updateTv()
         AccountManager.initMainAPI()
-        NewPipe.init(DownloaderTestImpl.getInstance())
 
         MainActivity.activityResultLauncher =
             componentActivity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->

@@ -180,10 +180,8 @@ object BiometricAuthenticator {
     }
 
     fun isAuthEnabled(ctx: Context):Boolean {
-        return ctx.let {
-            PreferenceManager.getDefaultSharedPreferences(ctx)
-                .getBoolean(getString(ctx, R.string.biometric_key), false)
-        }
+        // TV-LITE: biometric app-lock permanently disabled
+        return false
     }
 
     interface BiometricCallback {

@@ -171,6 +171,8 @@ object DownloadQueueManager {
     }
 
     private fun startQueueService(context: Context?) {
+        // TV-LITE: download services removed; queue is never started
+        if (true) return
         if (context == null) {
             Log.d(TAG, "Cannot start download queue service, null context.")
             return

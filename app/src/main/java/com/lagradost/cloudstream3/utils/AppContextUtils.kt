@@ -47,11 +47,6 @@ import androidx.tvprovider.media.tv.TvContractCompat
 import androidx.tvprovider.media.tv.WatchNextProgram
 import androidx.tvprovider.media.tv.WatchNextProgram.fromCursor
 import androidx.viewpager2.widget.ViewPager2
-import com.google.android.gms.cast.framework.CastContext
-import com.google.android.gms.cast.framework.CastState
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailability
-import com.google.android.gms.common.wrappers.Wrappers
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.lagradost.cloudstream3.APIHolder.apis
 import com.lagradost.cloudstream3.AllLanguagesName
@@ -434,7 +429,7 @@ object AppContextUtils {
 
     private fun Context.getHasTrailers(): Boolean {
         val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
-        return settingsManager.getBoolean(this.getString(R.string.show_trailers_key), true)
+        return false // TV-LITE: trailer support removed
     }
 
     fun Context.shouldShowPlayerMetadata(): Boolean {
@@ -588,6 +583,11 @@ object AppContextUtils {
     /**
      * If fallbackWebview is true and a fragment is supplied then it will open a webview with the url if the browser fails.
      * */
+    // TV-LITE: Chromecast support removed
+    fun Context.isCastApiAvailable(): Boolean = false
+
+    fun Context.isConnectedToChromecast(): Boolean = false
+
     fun Context.openBrowser(
         url: String,
         fallbackWebview: Boolean = false,
@@ -806,36 +806,6 @@ object AppContextUtils {
         return currentAudioFocusChangeListener
     }
 
-    fun Context.isCastApiAvailable(): Boolean {
-        val isCastApiAvailable =
-            GoogleApiAvailability.getInstance()
-                .isGooglePlayServicesAvailable(applicationContext) == ConnectionResult.SUCCESS
-
-        try {
-            applicationContext?.let {
-                val task = CastContext.getSharedInstance(it) { it.run() }
-                task.result
-            }
-        } catch (e: Exception) {
-            println(e)
-            // Track non-fatal
-            return false
-        }
-
-        return isCastApiAvailable
-    }
-
-    fun Context.isConnectedToChromecast(): Boolean {
-        if (isCastApiAvailable()) {
-            val executor: Executor = Executors.newSingleThreadExecutor()
-            val castContext = CastContext.getSharedInstance(this, executor)
-            if (castContext.result.castState == CastState.CONNECTED) {
-                return true
-            }
-        }
-        return false
-    }
-
     /**
      * Sets the focus to the negative button when in TV and Emulator layout.
      **/
@@ -874,7 +844,7 @@ object AppContextUtils {
     }
 
     fun Context.isAppInstalled(uri: String): Boolean {
-        val pm = Wrappers.packageManager(this)
+        val pm = this.packageManager
 
         return try {
             pm.getPackageInfo(uri, 0) // PackageManager.GET_ACTIVITIES

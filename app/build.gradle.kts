@@ -98,6 +98,16 @@ android {
                 keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
             }
         }
+
+        // TV-LITE: self-generated signing key (committed to the fork; see TV-LITE.md)
+        if (rootProject.file("tv-lite-keystore.p12").exists()) {
+            create("tvLite") {
+                storeFile = rootProject.file("tv-lite-keystore.p12")
+                storePassword = "tv-lite"
+                keyAlias = "tv-lite"
+                keyPassword = "tv-lite"
+            }
+        }
     }
 
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -151,6 +161,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // TV-LITE: sign with the committed keystore so release APKs are installable
+            if (signingConfigs.names.contains("tvLite")) {
+                signingConfig = signingConfigs.getByName("tvLite")
+            }
         }
         debug {
             isDebuggable = true
@@ -166,6 +180,9 @@ android {
     productFlavors {
         create("stable") {
             dimension = "state"
+            // TV-LITE: separate app id + version tag; installs alongside official CloudStream
+            applicationIdSuffix = ".tvlite"
+            versionNameSuffix = "-TVLITE"
         }
         create("prerelease") {
             dimension = "state"
@@ -177,6 +194,16 @@ android {
             }
             versionNameSuffix = "-PRE"
             versionCode = (System.currentTimeMillis() / 60000).toInt()
+        }
+    }
+
+    // TV-LITE: ARM-only ABI splits (drops x86/x86_64 native libs, ~50 MB of the universal APK)
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = true
         }
     }
 
@@ -256,7 +283,6 @@ dependencies {
 
     // PlayBack
     implementation(libs.colorpicker) // Subtitle Color Picker
-    implementation(libs.newpipeextractor) // For Trailers
     implementation(libs.juniversalchardet) // Subtitle Decoding
 
     // UI Stuff
@@ -265,7 +291,6 @@ dependencies {
     implementation(libs.tvprovider)
     implementation(libs.overlappingpanels) // Gestures
     implementation(libs.biometric) // Fingerprint Authentication
-    implementation(libs.previewseekbar.media3) // SeekBar Preview
     implementation(libs.qrcode.kotlin) // QR Code for PIN Auth on TV
 
     // Extensions & Other Libs
@@ -284,7 +309,6 @@ dependencies {
     implementation("me.xdrop:fuzzywuzzy:1.4.0")
 
     // Torrent Support
-    implementation(libs.torrentserver)
 
     // Downloading & Networking
     implementation(libs.work.runtime.ktx)

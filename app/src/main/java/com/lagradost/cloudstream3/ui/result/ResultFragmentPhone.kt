@@ -28,8 +28,6 @@ import androidx.lifecycle.viewModelScope
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.panels.PanelState
 import com.discord.panels.PanelsChildGestureRegionObserver
-import com.google.android.gms.cast.framework.CastButtonFactory
-import com.google.android.gms.cast.framework.CastContext
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
 import com.lagradost.cloudstream3.APIHolder
@@ -74,7 +72,6 @@ import com.lagradost.cloudstream3.ui.setRecycledViewPool
 import com.lagradost.cloudstream3.ui.settings.SettingsGeneral.Companion.pickDownloadPath
 import com.lagradost.cloudstream3.ui.settings.utils.getChooseFolderLauncher
 import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
-import com.lagradost.cloudstream3.utils.AppContextUtils.isCastApiAvailable
 import com.lagradost.cloudstream3.utils.AppContextUtils.loadCache
 import com.lagradost.cloudstream3.utils.AppContextUtils.openBrowser
 import com.lagradost.cloudstream3.utils.AppContextUtils.updateHasTrailers
@@ -658,36 +655,6 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                         com.lagradost.cloudstream3.utils.txt(message, name),
                         Toast.LENGTH_SHORT
                     )
-                }
-            }
-            mediaRouteButton.apply {
-                val chromecastSupport = api?.hasChromecastSupport == true
-                alpha = if (chromecastSupport) 1f else 0.3f
-                if (!chromecastSupport) {
-                    setOnClickListener {
-                        showToast(
-                            R.string.no_chromecast_support_toast,
-                            Toast.LENGTH_LONG
-                        )
-                    }
-                }
-                activity?.let { act ->
-                    if (act.isCastApiAvailable()) {
-                        try {
-                            CastButtonFactory.setUpMediaRouteButton(act, this)
-                            CastContext.getSharedInstance(act.applicationContext) {
-                                it.run()
-                            }.addOnCompleteListener {
-                                isGone = !it.isSuccessful
-                            }
-                            // this shit leaks for some reason
-                            //castContext.addCastStateListener { state ->
-                            //    media_route_button?.isGone = state == CastState.NO_DEVICES_AVAILABLE
-                            //}
-                        } catch (e: Exception) {
-                            logError(e)
-                        }
-                    }
                 }
             }
         }

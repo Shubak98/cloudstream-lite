@@ -24,7 +24,7 @@
             android:icon="@drawable/ic_baseline_notifications_active_24"
             android:summary="@string/updates_settings_des"
             android:title="@string/updates_settings"
-            app:defaultValue="true"
+            app:defaultValue="false"
             app:key="@string/auto_update_key" />
     </PreferenceCategory>
 

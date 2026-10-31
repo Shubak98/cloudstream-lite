@@ -20,7 +20,6 @@ import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.hidePre
 import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.setPaddingBottom
 import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.setToolBarScrollFlags
 import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.setUpToolbar
-import com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment
 import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.Qualities
@@ -239,11 +238,6 @@ class SettingsPlayer : BasePreferenceFragmentCompat() {
 
         getPref(R.string.subtitle_settings_key)?.setOnPreferenceClickListener {
             SubtitlesFragment.push(activity, false)
-            return@setOnPreferenceClickListener true
-        }
-
-        getPref(R.string.subtitle_settings_chromecast_key)?.setOnPreferenceClickListener {
-            ChromecastSubtitlesFragment.push(activity, false)
             return@setOnPreferenceClickListener true
         }
 

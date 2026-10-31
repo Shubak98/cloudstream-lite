@@ -21,7 +21,6 @@ import com.lagradost.cloudstream3.AnimeLoadResponse
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.context
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CommonActivity.activity
-import com.lagradost.cloudstream3.CommonActivity.getCastSession
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.EpisodeResponse
@@ -73,18 +72,15 @@ import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.WatchType
 import com.lagradost.cloudstream3.ui.player.GeneratorPlayer
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_ALL
-import com.lagradost.cloudstream3.ui.player.LOADTYPE_CHROMECAST
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP_DOWNLOAD
 import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
 import com.lagradost.cloudstream3.ui.player.SubtitleData
 import com.lagradost.cloudstream3.ui.result.EpisodeAdapter.Companion.getPlayerAction
 import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
-import com.lagradost.cloudstream3.utils.AppContextUtils.isConnectedToChromecast
 import com.lagradost.cloudstream3.utils.AppContextUtils.setDefaultFocus
 import com.lagradost.cloudstream3.utils.AppContextUtils.sortSubs
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
-import com.lagradost.cloudstream3.utils.CastHelper.startCast
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.Coroutines.ioWork
 import com.lagradost.cloudstream3.utils.Coroutines.ioWorkSafe
@@ -810,22 +806,6 @@ class ResultViewModel2 : ViewModel() {
         }
     }
 
-    private fun startChromecast(
-        activity: Activity?,
-        result: ResultEpisode,
-        isVisible: Boolean = true
-    ) {
-        if (activity == null) return
-        loadLinks(
-            result,
-            isVisible = isVisible,
-            sourceTypes = LOADTYPE_CHROMECAST,
-            isCasting = true
-        ) { data ->
-            startChromecast(activity, result, data.links, data.subs, 0)
-        }
-    }
-
     /**
      * Toggles the subscription status of an item.
      *
@@ -1121,37 +1101,6 @@ class ResultViewModel2 : ViewModel() {
         }
     }
 
-    private fun startChromecast(
-        activity: Activity?,
-        result: ResultEpisode,
-        links: List<ExtractorLink>,
-        subs: List<SubtitleData>,
-        startIndex: Int,
-    ) {
-        if (activity == null) return
-        val response = currentResponse ?: return
-        val eps = currentEpisodes[currentIndex ?: return] ?: return
-        // ResultEpisode.index spans all seasons; Cast indexes this season's list.
-        val castEpisodeIndex = eps.indexOfFirst { it.id == result.id }
-        if (castEpisodeIndex < 0) return
-
-        // Main needed because getCastSession needs to be on main thread
-        main {
-            activity.getCastSession()?.startCast(
-                response.apiName,
-                response.isMovie(),
-                response.name,
-                response.posterUrl,
-                castEpisodeIndex,
-                eps,
-                links,
-                subs,
-                startTime = result.getRealPosition(),
-                startIndex = startIndex
-            )
-        }
-    }
-
     fun cancelLinks() {
         currentLoadLinkJob?.cancel()
         currentLoadLinkJob = null
@@ -1362,15 +1311,6 @@ class ResultViewModel2 : ViewModel() {
             ACTION_SHOW_OPTIONS -> {
                 val options = mutableListOf<Pair<UiText, Int>>()
 
-                if (activity?.isConnectedToChromecast() == true) {
-                    options.addAll(
-                        listOf(
-                            txt(R.string.episode_action_chromecast_episode) to ACTION_CHROME_CAST_EPISODE,
-                            txt(R.string.episode_action_chromecast_mirror) to ACTION_CHROME_CAST_MIRROR,
-                        )
-                    )
-                }
-
                 options.add(txt(R.string.episode_action_play_in_app) to ACTION_PLAY_EPISODE_IN_PLAYER)
                 options.addAll(
                     listOf(
@@ -1419,16 +1359,10 @@ class ResultViewModel2 : ViewModel() {
 
             ACTION_CLICK_DEFAULT -> {
                 activity?.let { ctx ->
-                    if (ctx.isConnectedToChromecast()) {
-                        handleEpisodeClickEvent(
-                            click.copy(action = ACTION_CHROME_CAST_EPISODE)
-                        )
-                    } else {
-                        val action = getPlayerAction(ctx)
-                        handleEpisodeClickEvent(
-                            click.copy(action = action)
-                        )
-                    }
+                    val action = getPlayerAction(ctx)
+                    handleEpisodeClickEvent(
+                        click.copy(action = action)
+                    )
                 }
             }
 
@@ -1473,47 +1407,13 @@ class ResultViewModel2 : ViewModel() {
             }
 
             ACTION_DOWNLOAD_EPISODE -> {
-                val response = currentResponse ?: return
-                DownloadQueueManager.addToQueue(
-                    DownloadObjects.DownloadQueueItem(
-                        click.data,
-                        response.isMovie(),
-                        response.name,
-                        response.type,
-                        response.posterUrl,
-                        response.apiName,
-                        response.getId(),
-                        response.url,
-                    ).toWrapper()
-                )
+                // TV-LITE: video downloads removed (subtitle downloads are kept)
+                showToast(R.string.downloads_removed_tv_lite, Toast.LENGTH_SHORT)
             }
 
             ACTION_DOWNLOAD_MIRROR -> {
-                val response = currentResponse ?: return
-                acquireSingleLink(
-                    click.data,
-                    LOADTYPE_INAPP_DOWNLOAD,
-                    txt(R.string.episode_action_download_mirror)
-                ) { (result, index) ->
-                    DownloadQueueManager.addToQueue(
-                        DownloadObjects.DownloadQueueItem(
-                            click.data,
-                            response.isMovie(),
-                            response.name,
-                            response.type,
-                            response.posterUrl,
-                            response.apiName,
-                            response.getId(),
-                            response.url,
-                            listOf(result.links[index]),
-                            result.subs,
-                        ).toWrapper()
-                    )
-                    showToast(
-                        R.string.download_started,
-                        Toast.LENGTH_SHORT
-                    )
-                }
+                // TV-LITE: video downloads removed (subtitle downloads are kept)
+                showToast(R.string.downloads_removed_tv_lite, Toast.LENGTH_SHORT)
             }
 
             ACTION_RELOAD_EPISODE -> {
@@ -1529,21 +1429,6 @@ class ResultViewModel2 : ViewModel() {
                     R.string.links_reloaded_toast,
                     Toast.LENGTH_SHORT
                 )
-            }
-
-            ACTION_CHROME_CAST_MIRROR -> {
-                acquireSingleLink(
-                    click.data,
-                    LOADTYPE_CHROMECAST,
-                    txt(R.string.episode_action_chromecast_mirror),
-                    isCasting = true
-                ) { (result, index) ->
-                    startChromecast(activity, click.data, result.links, result.subs, index)
-                }
-            }
-
-            ACTION_CHROME_CAST_EPISODE -> {
-                startChromecast(activity, click.data)
             }
 
             ACTION_PLAY_EPISODE_IN_PLAYER -> {
@@ -2439,6 +2324,7 @@ class ResultViewModel2 : ViewModel() {
     }
 
     private fun loadTrailers(loadResponse: LoadResponse) = ioSafe {
+        if (!LoadResponse.isTrailersEnabled) return@ioSafe // TV-LITE: trailers removed
         _trailers.postValue(
             getTrailers(
                 loadResponse,

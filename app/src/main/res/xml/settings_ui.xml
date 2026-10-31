@@ -65,7 +65,7 @@
             app:defaultValue="true"
             app:key="search_suggestions_enabled" />
         <SwitchPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:icon="@drawable/baseline_theaters_24"
             android:key="@string/show_trailers_key"
             android:title="@string/show_trailers_settings" />

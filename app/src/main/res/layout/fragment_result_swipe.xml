@@ -59,15 +59,7 @@
                 android:animateLayoutChanges="true"
                 android:layout_gravity="center_vertical|end">
 
-            <androidx.mediarouter.app.MediaRouteButton
-                    android:layout_gravity="end|center_vertical"
-                    android:id="@+id/media_route_button"
-                    android:layout_width="50dp"
-                    android:layout_height="50dp"
-                    android:mediaRouteTypes="user"
-                    android:visibility="gone"
-                    app:mediaRouteButtonTint="?attr/textColor" />
-
+            
             <ImageView
                     android:visibility="gone"
                     android:nextFocusUp="@id/result_back"
@@ -243,15 +235,6 @@
                     style="@style/ExtendedFloatingActionButton"
                     tools:ignore="ContentDescription" />
 
-            <fragment
-                    app:customCastBackgroundColor="?attr/primaryBlackBackground"
-                    app:castControlButtons="@array/cast_mini_controller_control_buttons"
-                    android:id="@+id/cast_mini_controller"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:visibility="gone"
-                    class="com.lagradost.cloudstream3.ui.MyMiniControllerFragment"
-                    tools:ignore="FragmentTagUsage" />
-        </LinearLayout>
+                    </LinearLayout>
     </FrameLayout>
 </LinearLayout>

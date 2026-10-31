@@ -90,10 +90,6 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="${target_sdk_version}">
 
-        <meta-data
-            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.lagradost.cloudstream3.utils.CastOptionsProvider" />
-
         <profileable
             android:shell="true"
             tools:targetApi="q" />
@@ -245,28 +241,7 @@
         </activity>
 
         <receiver
-            android:name=".receivers.VideoDownloadRestartReceiver"
-            android:enabled="false"
-            android:exported="false">
-            <intent-filter android:exported="false">
-                <action android:name="restart_service" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
             android:name=".receivers.PackageInstallerStatusReceiver"
-            android:exported="false" />
-
-        <service
-            android:name=".services.VideoDownloadService"
-            android:enabled="true"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
-
-        <service
-            android:name=".services.DownloadQueueService"
-            android:enabled="true"
-            android:foregroundServiceType="dataSync"
             android:exported="false" />
 
         <!-- Necessary for WorkManager services: https://stackoverflow.com/a/77186316 -->
@@ -274,10 +249,6 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
-
-        <activity
-            android:name=".ui.ControllerActivity"
-            android:exported="false" />
 
         <service
             android:name=".services.PackageInstallerService"

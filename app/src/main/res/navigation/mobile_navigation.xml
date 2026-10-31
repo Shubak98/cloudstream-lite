@@ -102,19 +102,6 @@
     </action>
 
     <action
-        android:id="@+id/global_to_navigation_chrome_subtitles"
-        app:destination="@id/navigation_chrome_subtitles"
-        app:enterAnim="@anim/enter_anim"
-        app:exitAnim="@anim/exit_anim"
-        app:popEnterAnim="@anim/enter_anim"
-        app:popExitAnim="@anim/exit_anim">
-        <argument
-            android:name="hide"
-            android:defaultValue="true"
-            app:argType="boolean" />
-    </action>
-
-    <action
         android:id="@+id/global_to_navigation_settings_plugins"
         app:destination="@id/navigation_settings_plugins"
         app:enterAnim="@anim/enter_anim"
@@ -146,13 +133,6 @@
         <action
             android:id="@+id/action_navigation_settings_player_to_navigation_subtitles"
             app:destination="@id/navigation_subtitles"
-            app:enterAnim="@anim/enter_anim"
-            app:exitAnim="@anim/exit_anim"
-            app:popEnterAnim="@anim/enter_anim"
-            app:popExitAnim="@anim/exit_anim" />
-        <action
-            android:id="@+id/action_navigation_settings_player_to_navigation_chrome_subtitles"
-            app:destination="@id/navigation_chrome_subtitles"
             app:enterAnim="@anim/enter_anim"
             app:exitAnim="@anim/exit_anim"
             app:popEnterAnim="@anim/enter_anim"
@@ -424,17 +404,6 @@
         app:popEnterAnim="@anim/enter_anim"
         app:popExitAnim="@anim/exit_anim"
         tools:layout="@layout/subtitle_settings" />
-
-    <fragment
-        android:id="@+id/navigation_chrome_subtitles"
-        android:name="com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment2"
-        android:layout_height="match_parent"
-        android:label="@string/chromecast_subtitles_settings"
-        app:enterAnim="@anim/enter_anim"
-        app:exitAnim="@anim/exit_anim"
-        app:popEnterAnim="@anim/enter_anim"
-        app:popExitAnim="@anim/exit_anim"
-        tools:layout="@layout/chromecast_subtitle_settings" />
 
     <fragment
         android:id="@+id/navigation_quick_search"

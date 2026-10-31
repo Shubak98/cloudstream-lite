@@ -62,10 +62,6 @@ abstract class AccountManager {
         }
 
         val allApis = arrayOf(
-            SyncRepo(malApi),
-            SyncRepo(kitsuApi),
-            SyncRepo(aniListApi),
-            SyncRepo(simklApi),
             SyncRepo(localListApi),
             SubtitleRepo(openSubtitlesApi),
             SubtitleRepo(addic7ed),
@@ -125,10 +121,6 @@ abstract class AccountManager {
             SubtitleRepo(subSourceApi)
         )
         val syncApis = arrayOf(
-            SyncRepo(malApi),
-            SyncRepo(kitsuApi),
-            SyncRepo(aniListApi),
-            SyncRepo(simklApi),
             SyncRepo(localListApi)
         )
 

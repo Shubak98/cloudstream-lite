@@ -8,12 +8,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerControlView
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.R
-import com.github.rubensousa.previewseekbar.media3.PreviewTimeBar
+import androidx.media3.ui.DefaultTimeBar
 import java.lang.ref.WeakReference
 
 
 @OptIn(UnstableApi::class)
-class LivePreviewTimeBar(val ctx: Context, attrs: AttributeSet) : PreviewTimeBar(ctx, attrs) {
+class LivePreviewTimeBar(val ctx: Context, attrs: AttributeSet) : DefaultTimeBar(ctx, attrs) {
 
     private var _currentPlayerView: WeakReference<PlayerView>? = null
     val currentPlayer: Player? get() = _currentPlayerView?.get()?.player

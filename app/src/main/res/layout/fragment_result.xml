@@ -201,15 +201,7 @@
                             android:id="@+id/media_route_button_holder"
                             android:layout_gravity="center_vertical|end">
 
-                        <androidx.mediarouter.app.MediaRouteButton
-                                android:layout_gravity="end|center_vertical"
-                                android:id="@+id/media_route_button"
-                                android:layout_width="50dp"
-                                android:layout_height="50dp"
-                                android:mediaRouteTypes="user"
-                                android:visibility="gone"
-                                app:mediaRouteButtonTint="?attr/textColor" />
-
+                        
 
                         <ImageView
                                 android:nextFocusUp="@id/result_back"

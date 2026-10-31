@@ -16,12 +16,6 @@ val LOADTYPE_INAPP_DOWNLOAD = setOf(
     ExtractorLinkType.M3U8
 )
 
-val LOADTYPE_CHROMECAST = setOf(
-    ExtractorLinkType.VIDEO,
-    ExtractorLinkType.DASH,
-    ExtractorLinkType.M3U8
-)
-
 val LOADTYPE_ALL = ExtractorLinkType.entries.toSet()
 
 

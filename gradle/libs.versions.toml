@@ -39,18 +39,15 @@ lifecycleKtx = "2.10.0"
 material = "1.14.0"
 media3 = "1.9.3"
 navigationKtx = "2.9.8"
-newpipeextractor = "v0.26.3"
 nextlibMedia3 = "1.9.3-0.12.0"
 nicehttp = "0.4.18"
 overlappingpanels = "0.1.5"
 paletteKtx = "1.0.0"
 preferenceKtx = "1.2.1"
-previewseekbarMedia3 = "1.1.1.0"
 qrcodeKotlin = "4.5.0"
 rhino = { strictly = "1.8.1" } # Requires minSdk 26 or later beginning at version 1.9.0
 safefile = "0.0.8"
 shimmer = "0.5.0"
-torrentserver = "7861970"
 tvprovider = "1.1.0"
 video = "1.0.0"
 workRuntimeKtx = "2.11.2"
@@ -118,7 +115,6 @@ ktor-http = { module = "io.ktor:ktor-http", version.ref = "ktor" }
 lifecycle-livedata-ktx = { module = "androidx.lifecycle:lifecycle-livedata-ktx", version.ref = "lifecycleKtx" }
 lifecycle-viewmodel-ktx = { module = "androidx.lifecycle:lifecycle-viewmodel-ktx", version.ref = "lifecycleKtx" }
 material = { module = "com.google.android.material:material", version.ref = "material" }
-media3-cast = { module = "androidx.media3:media3-cast", version.ref = "media3" }
 media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
 media3-container  = { module = "androidx.media3:media3-container", version.ref = "media3" }
 media3-datasource-cronet = { group = "androidx.media3", name = "media3-datasource-cronet", version.ref = "media3" }
@@ -130,19 +126,16 @@ media3-session = { module = "androidx.media3:media3-session", version.ref = "med
 media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
 navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version.ref = "navigationKtx" }
 navigation-ui-ktx = { module = "androidx.navigation:navigation-ui-ktx", version.ref = "navigationKtx" }
-newpipeextractor = { module = "com.github.teamnewpipe:NewPipeExtractor", version.ref = "newpipeextractor" }
 nextlib-media3ext = { module = "io.github.anilbeesetti:nextlib-media3ext", version.ref = "nextlibMedia3" }
 nextlib-mediainfo = { module = "io.github.anilbeesetti:nextlib-mediainfo", version.ref = "nextlibMedia3" }
 nicehttp = { module = "com.github.Blatzar:NiceHttp", version.ref = "nicehttp" }
 overlappingpanels = { module = "com.github.discord:OverlappingPanels", version.ref = "overlappingpanels" }
 palette-ktx = { module = "androidx.palette:palette-ktx", version.ref = "paletteKtx" }
 preference-ktx = { module = "androidx.preference:preference-ktx", version.ref = "preferenceKtx" }
-previewseekbar-media3 = { module = "com.github.rubensousa:previewseekbar-media3", version.ref = "previewseekbarMedia3" }
 qrcode-kotlin = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrcodeKotlin" }
 rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
 safefile = { module = "com.github.LagradOst:SafeFile", version.ref = "safefile" }
 shimmer = { module = "com.facebook.shimmer:shimmer", version.ref = "shimmer" }
-torrentserver = { module = "com.github.recloudstream:torrentserver", version.ref = "torrentserver" }
 tvprovider = { module = "androidx.tvprovider:tvprovider", version.ref = "tvprovider" }
 video = { module = "com.google.android.mediahome:video", version.ref = "video" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
@@ -175,7 +168,7 @@ compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMu
 coil = ["coil", "coil-network-okhttp"]
 cryptography = ["cryptography-core", "cryptography-provider-optimal"]
 lifecycle = ["lifecycle-livedata-ktx", "lifecycle-viewmodel-ktx"]
-media3 = ["media3-cast", "media3-common", "media3-container", "media3-datasource-cronet", "media3-datasource-okhttp", "media3-exoplayer", "media3-exoplayer-dash", "media3-exoplayer-hls", "media3-session", "media3-ui"]
+media3 = ["media3-common", "media3-container", "media3-datasource-cronet", "media3-datasource-okhttp", "media3-exoplayer", "media3-exoplayer-dash", "media3-exoplayer-hls", "media3-session", "media3-ui"]
 navigation = ["navigation-fragment-ktx", "navigation-ui-ktx"]
 nextlib = ["nextlib-media3ext", "nextlib-mediainfo"]
 compose = ["compose-foundation", "compose-material3", "compose-resources", "compose-runtime", "compose-ui", "compose-ui-tooling", "compose-ui-tooling-preview", "lifecycle-viewmodel-compose", "coil-compose"]

@@ -51,10 +51,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
-import com.google.android.gms.cast.framework.CastContext
-import com.google.android.gms.cast.framework.Session
-import com.google.android.gms.cast.framework.SessionManager
-import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.navigationrail.NavigationRailView
@@ -128,7 +124,6 @@ import com.lagradost.cloudstream3.ui.setup.SetupFragmentExtensions
 import com.lagradost.cloudstream3.utils.ApkInstaller
 import com.lagradost.cloudstream3.utils.AppContextUtils.getApiDubstatusSettings
 import com.lagradost.cloudstream3.utils.AppContextUtils.html
-import com.lagradost.cloudstream3.utils.AppContextUtils.isCastApiAvailable
 import com.lagradost.cloudstream3.utils.AppContextUtils.isLtr
 import com.lagradost.cloudstream3.utils.AppContextUtils.isNetworkAvailable
 import com.lagradost.cloudstream3.utils.AppContextUtils.isRtl
@@ -493,14 +488,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
     private fun updateNavBar(destination: NavDestination) {
         this.hideKeyboard()
 
-        // Fucks up anime info layout since that has its own layout
-        binding?.castMiniControllerHolder?.isVisible =
-            !listOf(
-                R.id.navigation_results_phone,
-                R.id.navigation_results_tv,
-                R.id.navigation_player
-            ).contains(destination.id)
-
         val isNavVisible = listOf(
             R.id.navigation_home,
             R.id.navigation_search,
@@ -510,7 +497,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             R.id.navigation_download_child,
             R.id.navigation_download_queue,
             R.id.navigation_subtitles,
-            R.id.navigation_chrome_subtitles,
             R.id.navigation_settings_player,
             R.id.navigation_settings_updates,
             R.id.navigation_settings_ui,
@@ -586,7 +572,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                 in listOf(
                     R.id.navigation_settings,
                     R.id.navigation_subtitles,
-                    R.id.navigation_chrome_subtitles,
                     R.id.navigation_settings_player,
                     R.id.navigation_settings_updates,
                     R.id.navigation_settings_ui,
@@ -604,52 +589,10 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         }
     }
 
-    //private var mCastSession: CastSession? = null
-    var mSessionManager: SessionManager? = null
-    private val mSessionManagerListener: SessionManagerListener<Session> by lazy { SessionManagerListenerImpl() }
-
-    private inner class SessionManagerListenerImpl : SessionManagerListener<Session> {
-        override fun onSessionStarting(session: Session) {
-        }
-
-        override fun onSessionStarted(session: Session, sessionId: String) {
-            invalidateOptionsMenu()
-        }
-
-        override fun onSessionStartFailed(session: Session, i: Int) {
-        }
-
-        override fun onSessionEnding(session: Session) {
-        }
-
-        override fun onSessionResumed(session: Session, wasSuspended: Boolean) {
-            invalidateOptionsMenu()
-        }
-
-        override fun onSessionResumeFailed(session: Session, i: Int) {
-        }
-
-        override fun onSessionSuspended(session: Session, i: Int) {
-        }
-
-        override fun onSessionEnded(session: Session, error: Int) {
-        }
-
-        override fun onSessionResuming(session: Session, s: String) {
-        }
-    }
-
     override fun onResume() {
         super.onResume()
         afterPluginsLoadedEvent += ::onAllPluginsLoaded
         setActivityInstance(this)
-        try {
-            if (isCastApiAvailable()) {
-                mSessionManager?.addSessionManagerListener(mSessionManagerListener)
-            }
-        } catch (e: Exception) {
-            logError(e)
-        }
     }
 
     override fun onPause() {
@@ -658,14 +601,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         // Start any delayed updates
         if (ApkInstaller.delayedInstaller?.startInstallation() == true) {
             Toast.makeText(this, R.string.update_started, Toast.LENGTH_LONG).show()
-        }
-        try {
-            if (isCastApiAvailable()) {
-                mSessionManager?.removeSessionManagerListener(mSessionManagerListener)
-                //mCastSession = null
-            }
-        } catch (e: Exception) {
-            logError(e)
         }
     }
 
@@ -722,10 +657,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             }
         }
         filesToDelete = setOf()
-        val broadcastIntent = Intent()
-        broadcastIntent.action = "restart_service"
-        broadcastIntent.setClass(this, VideoDownloadRestartReceiver::class.java)
-        this.sendBroadcast(broadcastIntent)
         afterPluginsLoadedEvent -= ::onAllPluginsLoaded
         detachBackPressedCallback("MainActivityDefault")
         super.onDestroy()
@@ -1202,14 +1133,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         setNavigationBarColorCompat(R.attr.primaryGrayBackground)
         updateLocale()
         super.onCreate(savedInstanceState)
-        try {
-            if (isCastApiAvailable()) {
-                CastContext.getSharedInstance(this) { it.run() }
-                    .addOnSuccessListener { mSessionManager = it.sessionManager }
-            }
-        } catch (t: Throwable) {
-            logError(t)
-        }
 
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         updateTv()

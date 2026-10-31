@@ -65,17 +65,8 @@ interface IPreviewGenerator {
 
     companion object {
         fun new(): IPreviewGenerator {
-            val userDisabled = CloudStreamApp.context?.let { ctx ->
-                PreferenceManager.getDefaultSharedPreferences(ctx)?.getBoolean(
-                    ctx.getString(R.string.preview_seekbar_key), true
-                ) == false
-            } ?: false
-            /** because TV has low ram + not show we disable this for now */
-            return if (isLayout(TV) || userDisabled) {
-                empty()
-            } else {
-                PreviewGenerator()
-            }
+            // TV-LITE: seekbar preview generation permanently disabled (saves RAM/CPU)
+            return empty()
         }
 
         fun empty(): IPreviewGenerator {

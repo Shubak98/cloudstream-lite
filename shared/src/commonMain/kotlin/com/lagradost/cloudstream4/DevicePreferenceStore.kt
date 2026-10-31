@@ -33,7 +33,7 @@ class AppSettings internal constructor(
 }
 
 class PluginPreferences(preferences: PreferenceStore) {
-    val autoUpdate = preferences.getBoolean("auto_update_plugins", true)
+    val autoUpdate = preferences.getBoolean("auto_update_plugins", false) // TV-LITE: manual updates only
     /** Not used anymore, as a user should never auto install all plugins in a repository */
     val autoDownload = preferences.getInt("auto_download_plugins_key2", 0)
 }
@@ -45,7 +45,7 @@ class BackupPreferences(preferences: PreferenceStore) {
 }
 class UpdatePreferences(preferences: PreferenceStore) {
     val apkInstaller = preferences.getInt("apk_installer_key",1)
-    val showAppUpdates = preferences.getBoolean("auto_update", true)
+    val showAppUpdates = preferences.getBoolean("auto_update", false) // TV-LITE: manual updates only
     // Node id for this update
     val skipUpdate = preferences.getString("skip_update_key", "")
 }
@@ -82,7 +82,7 @@ class UIPreferences(preferences: PreferenceStore) {
         "show_kitsu_posters_key", true
     )
     val trailersEnabled = preferences.getBoolean(
-        "show_trailers_key", true
+        "show_trailers_key", false
     )
     val castEnabled = preferences.getBoolean(
         "show_cast_in_details_key", true
@@ -173,7 +173,7 @@ class PlayerPreferences(preferences: PreferenceStore) {
     val skipOpEnabled = preferences.getBoolean("enable_skip_op_from_database", true)
     val autoRotateEnabled = preferences.getBoolean("auto_rotate_video_key", true)
     val rotateButtonEnabled = preferences.getBoolean("rotate_video_key", false)
-    val previewBarEnabled = preferences.getBoolean("preview_seekbar_key", true)
+    val previewBarEnabled = preferences.getBoolean("preview_seekbar_key", false)
     val softwareDecoding = preferences.getInt("software_decoding_key2", -1)
     val extraBrightnessEnabled = preferences.getBoolean("extra_brightness_key", false)
     val swipeHorizontalEnabled = preferences.getBoolean("swipe_enabled_key", true)

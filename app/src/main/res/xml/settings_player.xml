@@ -48,11 +48,6 @@
             android:key="@string/subtitle_settings_key"
             android:title="@string/player_subtitles_settings"
             app:summary="@string/player_subtitles_settings_des" />
-        <Preference
-            android:icon="@drawable/ic_outline_subtitles_24"
-            android:key="@string/subtitle_settings_chromecast_key"
-            android:title="@string/chromecast_subtitles_settings"
-            app:summary="@string/chromecast_subtitles_settings_des" />
     </PreferenceCategory>
 
 
@@ -116,12 +111,6 @@
             android:title="@string/auto_rotate_video"
             app:defaultValue="true"
             app:key="@string/auto_rotate_video_key" />
-        <SwitchPreference
-            android:icon="@drawable/preview_seekbar_24"
-            android:summary="@string/preview_seekbar_desc"
-            android:title="@string/preview_seekbar"
-            app:defaultValue="true"
-            app:key="@string/preview_seekbar_key" />
         <Preference
             android:icon="@drawable/ic_baseline_extension_24"
             android:summary="@string/software_decoding_desc"

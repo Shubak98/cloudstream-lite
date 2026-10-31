@@ -45,8 +45,6 @@ import androidx.media3.ui.TimeBar
 import androidx.preference.PreferenceManager
 import androidx.vectordrawable.graphics.drawable.Animatable2Compat
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
-import com.github.rubensousa.previewseekbar.PreviewBar
-import com.github.rubensousa.previewseekbar.media3.PreviewTimeBar
 import com.lagradost.cloudstream3.CommonActivity.isInPIPMode
 import com.lagradost.cloudstream3.CommonActivity.screenWidth
 import com.lagradost.cloudstream3.CommonActivity.showToast
@@ -283,10 +281,8 @@ class PlayerView @JvmOverloads constructor(
         )
 
         if (player is CS3IPlayer) {
-            // Preview bar
-            val progressBar: PreviewTimeBar? = exoPlayerView?.findViewById(R.id.exo_progress)
-            exoProgress = progressBar as? LivePreviewTimeBar
-            val previewImageView: ImageView? = exoPlayerView?.findViewById(R.id.previewImageView)
+            // TV-LITE: seekbar preview removed (LivePreviewTimeBar now extends DefaultTimeBar)
+            exoProgress = exoPlayerView?.findViewById(R.id.exo_progress)
             val previewFrameLayout: FrameLayout? =
                 exoPlayerView?.findViewById(R.id.previewFrameLayout)
 
@@ -294,42 +290,6 @@ class PlayerView @JvmOverloads constructor(
              * as previewFrameLayout is normally invisible */
             if(isLayout(TV)) {
                 previewFrameLayout?.isVisible = false
-            }
-
-            if (progressBar != null && previewImageView != null && previewFrameLayout != null && !isLayout(TV)) {
-                var resume = false
-                progressBar.addOnScrubListener(object : PreviewBar.OnScrubListener {
-                    override fun onScrubStart(previewBar: PreviewBar?) {
-                        val cs3 = player as? CS3IPlayer ?: return
-                        val hasPreview = cs3.hasPreview()
-                        progressBar.isPreviewEnabled = hasPreview
-                        resume = cs3.getIsPlaying()
-                        if (resume) cs3.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Player)
-                        // No clashing UI
-                        if (hasPreview) subView?.isVisible = false
-                    }
-
-                    override fun onScrubMove(previewBar: PreviewBar?, progress: Int, fromUser: Boolean) {}
-
-                    override fun onScrubStop(previewBar: PreviewBar?) {
-                        val cs3 = player as? CS3IPlayer ?: return
-                        if (resume) cs3.handleEvent(CSPlayerEvent.Play, PlayerEventSource.Player)
-                        // Delay to prevent the small flicker of subtitle before seeking.
-                        subView?.postDelayed({
-                            // If we are not scrubbing then show subtitles again.
-                            if (previewBar == null || !previewBar.isPreviewEnabled || !previewBar.isShowingPreview) {
-                                subView?.isVisible = true
-                            }
-                        }, 200)
-                    }
-                })
-                progressBar.attachPreviewView(previewFrameLayout)
-                progressBar.setPreviewLoader { currentPosition, max ->
-                    val cs3 = player as? CS3IPlayer ?: return@setPreviewLoader
-                    val bitmap = cs3.getPreview(currentPosition.toFloat().div(max.toFloat()))
-                    previewImageView.isGone = bitmap == null
-                    previewImageView.setImageBitmap(bitmap)
-                }
             }
 
             subView = exoPlayerView?.findViewById(androidx.media3.ui.R.id.exo_subtitles)

@@ -468,10 +468,6 @@ class SettingsAccount : BasePreferenceFragmentCompat(), BiometricCallback {
 
         val syncApis =
             listOf(
-                R.string.mal_key to SyncRepo(malApi),
-                R.string.kitsu_key to SyncRepo(kitsuApi),
-                R.string.anilist_key to SyncRepo(aniListApi),
-                R.string.simkl_key to SyncRepo(simklApi),
                 R.string.opensubtitles_key to SubtitleRepo(openSubtitlesApi),
                 R.string.subdl_key to SubtitleRepo(subDlApi),
                 R.string.animeskip_key to PlainAuthRepo(animeSkipApi),

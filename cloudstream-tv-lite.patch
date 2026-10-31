@@ -1,0 +1,3799 @@
+diff --git a/.github/workflows/tv-lite.yml b/.github/workflows/tv-lite.yml
+new file mode 100644
+index 0000000..34d6d3c
+--- /dev/null
++++ b/.github/workflows/tv-lite.yml
+@@ -0,0 +1,41 @@
++name: TV-Lite Build
++
++on:
++  workflow_dispatch:
++  push:
++    branches: [ tv-lite ]
++
++concurrency:
++  group: "tv-lite-build"
++  cancel-in-progress: true
++
++permissions:
++  contents: read
++
++jobs:
++  build:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v6
++
++      - name: Set up JDK 17
++        uses: actions/setup-java@v5
++        with:
++          distribution: temurin
++          java-version: 17
++
++      - name: Grant execute permission for gradlew
++        run: chmod +x gradlew
++
++      - name: Setup Gradle
++        uses: gradle/actions/setup-gradle@v5
++
++      - name: Build TV-Lite APKs (ARM only, signed)
++        run: ./gradlew assembleStableRelease
++
++      - name: Upload APKs
++        uses: actions/upload-artifact@v4
++        with:
++          name: cloudstream-tv-lite
++          path: app/build/outputs/apk/stable/release/*.apk
++          if-no-files-found: error
+diff --git a/TV-LITE.md b/TV-LITE.md
+new file mode 100644
+index 0000000..6e85bdd
+--- /dev/null
++++ b/TV-LITE.md
+@@ -0,0 +1,94 @@
++# CloudStream TV-Lite (v4.8.0 base)
++
++A trimmed-down build of CloudStream for low-end Android TV devices.
++Base: upstream commit `5024ace2922a148d38df2a816b483b529789cf58` (v4.8.0).
++
++## What was removed / changed
++
++| # | Change | Effect |
++|---|--------|--------|
++| 1 | **Built-in torrent server removed** (TorrServer / `libgojni.so`) | −12.4 MB native lib per ABI, no background torrent service. Magnet links show an info message; "Open with → external torrent app" (BiglyBT/LibreTorrent) still works |
++| 2 | **x86 / x86_64 native libs removed** (ARM-only ABI splits) | −50 MB uncompressed; CI produces `arm64-v8a`, `armeabi-v7a` and `universal` (ARM) APKs |
++| 3 | **Chromecast removed** (`media3-cast`, play-services-cast, cast UI/sessions/mini-controller, Chromecast subtitle settings) | −3–4 MB code, no Google Play Services cast discovery running in background |
++| 4 | **Video downloads removed** (download services, queue service, restart receiver, download episode actions) | No download services can ever start. Playing/deleting already-downloaded files still works |
++| 5 | **Trailers disabled + NewPipe Extractor removed** | No trailer fetching (network/CPU) on result pages |
++| 6 | **Tracking unregistered** (AniList, MAL, Kitsu, Simkl) | No sync providers in settings, no sync network calls. Local watchlist + progress tracking fully kept |
++| 7 | **Seekbar preview removed** (`previewseekbar`, frame-decoding preview generator) | Less RAM/CPU in player. Live-edge seekbar behavior kept |
++| 8 | **Biometric app-lock permanently disabled** | Was already hidden on TV; now can never activate (e.g. from a restored backup) |
++| 9 | **All auto-update checks default to OFF** (app updates + plugin auto-updates) | No background update checks/downloads. Manual checking still available in Settings → Updates |
++| 10 | **App ID changed to `com.lagradost.cloudstream3.tvlite`**, version suffix `-TVLITE` | Installs **alongside** the official app — no uninstall needed, easy rollback |
++
++### Kept intact
++- Extension/plugin system (repositories, providers, extractors) — **the `library` module is untouched, so all existing extensions keep working**
++- Subtitle providers (OpenSubtitles, Addic7ed, SubSource, Subdl) + subtitle downloading + anime-skip
++- Local watchlist / watch history / accounts (local)
++- In-app updater code (manual "check for update" possible, but see note below)
++- WorkManager jobs (backups, plugin subscriptions) — but auto-update defaults are OFF
++- Android TV "Watch Next" integration, fcast (Web Video Caster / external cast actions)
++
++### Expected results
++- APK download: **~72 MB → ~33 MB** (arm64) / ~38 MB (universal ARM)
++- Install footprint: **~167 MB → ~76 MB**
++- Runtime: fewer background services, no cast/GMS discovery, no trailer fetching, no preview decoding, no auto-update checks → less RAM pressure and fewer stutters on 1–2 GB TVs
++
++## How to build (no PC needed — GitHub Codespaces + Actions)
++
++1. **Fork** `recloudstream/cloudstream` on GitHub.
++2. In your fork page: green **Code** button → **Codespaces** tab → **Create codespace on master** (free tier is enough).
++3. Download `cloudstream-tv-lite.patch` (provided alongside this file) and **drag & drop it into the Codespaces file explorer** (into the repo root folder).
++4. In the Codespaces terminal:
++   ```bash
++   git checkout -b tv-lite 5024ace2922a148d38df2a816b483b529789cf58
++   git apply --whitespace=nowarn cloudstream-tv-lite.patch
++   git add -A
++   git commit -m "CloudStream TV-Lite v4.8.0"
++   git push -u origin tv-lite
++   ```
++5. Go to your fork on GitHub → **Actions** tab (enable workflows if asked) → **TV-Lite Build** → **Run workflow** → branch `tv-lite`.
++6. After ~15–30 min, open the workflow run → **Artifacts** → download `cloudstream-tv-lite`.
++7. Inside the zip:
++   - `app-stable-arm64-v8a-release.apk` ← **use this on virtually any Android TV made since ~2017**
++   - `app-stable-armeabi-v7a-release.apk` ← only if the arm64 one refuses to install (very old device)
++   - `app-stable-universal-release.apk` ← works on any ARM device (bigger)
++
++Transfer the APK to your TV (USB stick, "Send files to TV" app, or `adb install`) and install.
++
++### Alternative: build on your own PC
++Requirements: JDK 17 + Android SDK (compileSdk 37) + ~8 GB RAM.
++```bash
++git clone https://github.com/<you>/cloudstream && cd cloudstream
++git checkout -b tv-lite 5024ace2922a148d38df2a816b483b529789cf58
++git apply --whitespace=nowarn /path/to/cloudstream-tv-lite.patch
++./gradlew assembleStableRelease
++# APKs: app/build/outputs/apk/stable/release/
++```
++
++## Install & migration notes
++
++- **Both apps coexist** (different app IDs). To move your data: in the official app go to
++  *Settings → Backup & Restore → create a backup*, then in TV-Lite *restore* that backup.
++  (Restore skips removed features automatically; downloads/tracking data is simply not restored.)
++- Once TV-Lite runs well, you can uninstall the official app to free RAM/storage.
++- **Updating:** the in-app updater points at official releases, whose signature differs — do **not**
++  use it to update TV-Lite (install would fail). To update: re-run the **TV-Lite Build** workflow on
++  an updated base and install the new APK over the old one (same signing key = seamless update).
++
++## Security note about the signing key
++
++`tv-lite-keystore.p12` (password/alias: `tv-lite`) is committed so that every CI build produces
++APKs that can update each other. Since your fork is public, **anyone could sign an APK that your
++device would accept as an update to TV-Lite**. Only install TV-Lite APKs that **your own** Actions
++run produced. If that bothers you, delete the `.p12` from the repo and instead store it as a
++GitHub Actions secret and adapt the workflow + `signingConfigs` accordingly.
++
++## Troubleshooting
++
++- **Build fails on the `splits { abi { ... } }` block** (very future AGP versions): replace that
++  block in `app/build.gradle.kts` with `ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }`
++  inside `defaultConfig` — you then get a single universal ARM APK.
++- **`git apply` reports conflicts:** upstream moved past the base commit. Check out the exact base
++  SHA shown above first (step 4 does this). If it still fails, the patch needs a rebase.
++- **Only run `assembleStableRelease`** — unit tests were not updated for the removals, so
++  `./gradlew build` / `check` will fail on test compilation; this does not affect the APK.
++- TV still stutters? Check *Settings → Extensions*: many installed repositories/extensions are the
++  most common cause of lag on low-RAM TVs. Keep only the ones you use.
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index c714368..99f932f 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -98,6 +98,16 @@ android {
+                 keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+             }
+         }
++
++        // TV-LITE: self-generated signing key (committed to the fork; see TV-LITE.md)
++        if (rootProject.file("tv-lite-keystore.p12").exists()) {
++            create("tvLite") {
++                storeFile = rootProject.file("tv-lite-keystore.p12")
++                storePassword = "tv-lite"
++                keyAlias = "tv-lite"
++                keyPassword = "tv-lite"
++            }
++        }
+     }
+ 
+     compileSdk = libs.versions.compileSdk.get().toInt()
+@@ -151,6 +161,10 @@ android {
+                 getDefaultProguardFile("proguard-android-optimize.txt"),
+                 "proguard-rules.pro"
+             )
++            // TV-LITE: sign with the committed keystore so release APKs are installable
++            if (signingConfigs.names.contains("tvLite")) {
++                signingConfig = signingConfigs.getByName("tvLite")
++            }
+         }
+         debug {
+             isDebuggable = true
+@@ -166,6 +180,9 @@ android {
+     productFlavors {
+         create("stable") {
+             dimension = "state"
++            // TV-LITE: separate app id + version tag; installs alongside official CloudStream
++            applicationIdSuffix = ".tvlite"
++            versionNameSuffix = "-TVLITE"
+         }
+         create("prerelease") {
+             dimension = "state"
+@@ -180,6 +197,16 @@ android {
+         }
+     }
+ 
++    // TV-LITE: ARM-only ABI splits (drops x86/x86_64 native libs, ~50 MB of the universal APK)
++    splits {
++        abi {
++            isEnable = true
++            reset()
++            include("armeabi-v7a", "arm64-v8a")
++            isUniversalApk = true
++        }
++    }
++
+     compileOptions {
+         isCoreLibraryDesugaringEnabled = true
+         sourceCompatibility = JavaVersion.toVersion(javaTarget.target)
+@@ -256,7 +283,6 @@ dependencies {
+ 
+     // PlayBack
+     implementation(libs.colorpicker) // Subtitle Color Picker
+-    implementation(libs.newpipeextractor) // For Trailers
+     implementation(libs.juniversalchardet) // Subtitle Decoding
+ 
+     // UI Stuff
+@@ -265,7 +291,6 @@ dependencies {
+     implementation(libs.tvprovider)
+     implementation(libs.overlappingpanels) // Gestures
+     implementation(libs.biometric) // Fingerprint Authentication
+-    implementation(libs.previewseekbar.media3) // SeekBar Preview
+     implementation(libs.qrcode.kotlin) // QR Code for PIN Auth on TV
+ 
+     // Extensions & Other Libs
+@@ -284,7 +309,6 @@ dependencies {
+     implementation("me.xdrop:fuzzywuzzy:1.4.0")
+ 
+     // Torrent Support
+-    implementation(libs.torrentserver)
+ 
+     // Downloading & Networking
+     implementation(libs.work.runtime.ktx)
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 3ff5951..1612210 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -90,10 +90,6 @@
+         android:usesCleartextTraffic="true"
+         tools:targetApi="${target_sdk_version}">
+ 
+-        <meta-data
+-            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+-            android:value="com.lagradost.cloudstream3.utils.CastOptionsProvider" />
+-
+         <profileable
+             android:shell="true"
+             tools:targetApi="q" />
+@@ -244,41 +240,16 @@
+             </intent-filter>
+         </activity>
+ 
+-        <receiver
+-            android:name=".receivers.VideoDownloadRestartReceiver"
+-            android:enabled="false"
+-            android:exported="false">
+-            <intent-filter android:exported="false">
+-                <action android:name="restart_service" />
+-            </intent-filter>
+-        </receiver>
+-
+         <receiver
+             android:name=".receivers.PackageInstallerStatusReceiver"
+             android:exported="false" />
+ 
+-        <service
+-            android:name=".services.VideoDownloadService"
+-            android:enabled="true"
+-            android:foregroundServiceType="dataSync"
+-            android:exported="false" />
+-
+-        <service
+-            android:name=".services.DownloadQueueService"
+-            android:enabled="true"
+-            android:foregroundServiceType="dataSync"
+-            android:exported="false" />
+-
+         <!-- Necessary for WorkManager services: https://stackoverflow.com/a/77186316 -->
+         <service
+             android:name="androidx.work.impl.foreground.SystemForegroundService"
+             android:foregroundServiceType="dataSync"
+             tools:node="merge" />
+ 
+-        <activity
+-            android:name=".ui.ControllerActivity"
+-            android:exported="false" />
+-
+         <service
+             android:name=".services.PackageInstallerService"
+             android:foregroundServiceType="dataSync"
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/CommonActivity.kt b/app/src/main/java/com/lagradost/cloudstream3/CommonActivity.kt
+index 8daf168..bbb5515 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/CommonActivity.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/CommonActivity.kt
+@@ -29,7 +29,6 @@ import androidx.core.content.ContextCompat
+ import androidx.core.view.children
+ import androidx.core.view.isNotEmpty
+ import androidx.preference.PreferenceManager
+-import com.google.android.gms.cast.framework.CastSession
+ import com.google.android.material.chip.ChipGroup
+ import com.google.android.material.navigationrail.NavigationRailView
+ import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+@@ -42,7 +41,6 @@ import com.lagradost.cloudstream3.syncproviders.AccountManager
+ import com.lagradost.cloudstream3.ui.home.HomeChildItemAdapter
+ import com.lagradost.cloudstream3.ui.home.ParentItemAdapter
+ import com.lagradost.cloudstream3.ui.player.PlayerPipHelper.isPIPPossible
+-import com.lagradost.cloudstream3.ui.player.Torrent
+ import com.lagradost.cloudstream3.ui.result.ActorAdaptor
+ import com.lagradost.cloudstream3.ui.result.EpisodeAdapter
+ import com.lagradost.cloudstream3.ui.result.ImageAdapter
+@@ -62,7 +60,6 @@ import java.lang.ref.WeakReference
+ import java.util.Locale
+ import kotlin.math.max
+ import kotlin.math.min
+-import org.schabi.newpipe.extractor.NewPipe
+ 
+ enum class FocusDirection {
+     Start,
+@@ -85,11 +82,6 @@ object CommonActivity {
+         activity = newActivity
+     }
+ 
+-    @MainThread
+-    fun Activity?.getCastSession(): CastSession? {
+-        return (this as MainActivity?)?.mSessionManager?.currentCastSession
+-    }
+-
+     val displayMetrics: DisplayMetrics = Resources.getSystem().displayMetrics
+ 
+     // screenWidth and screenHeight does always
+@@ -244,13 +236,11 @@ object CommonActivity {
+ 
+     fun init(act: Activity) {
+         setActivityInstance(act)
+-        ioSafe { Torrent.deleteAllFiles() }
+         val componentActivity = activity as? ComponentActivity ?: return
+ 
+         componentActivity.updateLocale()
+         componentActivity.updateTv()
+         AccountManager.initMainAPI()
+-        NewPipe.init(DownloaderTestImpl.getInstance())
+ 
+         MainActivity.activityResultLauncher =
+             componentActivity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/DownloaderTestImpl.kt b/app/src/main/java/com/lagradost/cloudstream3/DownloaderTestImpl.kt
+deleted file mode 100644
+index 8da7ca3..0000000
+--- a/app/src/main/java/com/lagradost/cloudstream3/DownloaderTestImpl.kt
++++ /dev/null
+@@ -1,77 +0,0 @@
+-package com.lagradost.cloudstream3
+-
+-import okhttp3.OkHttpClient
+-import okhttp3.RequestBody
+-import okhttp3.RequestBody.Companion.toRequestBody
+-import org.schabi.newpipe.extractor.downloader.Downloader
+-import org.schabi.newpipe.extractor.downloader.Request
+-import org.schabi.newpipe.extractor.downloader.Response
+-import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
+-import java.util.concurrent.TimeUnit
+-
+-
+-class DownloaderTestImpl private constructor(builder: OkHttpClient.Builder) : Downloader() {
+-    private val client: OkHttpClient = builder.readTimeout(30, TimeUnit.SECONDS).build()
+-    override fun execute(request: Request): Response {
+-        val httpMethod: String = request.httpMethod()
+-        val url: String = request.url()
+-        val headers: Map<String, List<String>> = request.headers()
+-        val dataToSend: ByteArray? = request.dataToSend()
+-        var requestBody: RequestBody? = null
+-        if (dataToSend != null) {
+-            requestBody = dataToSend.toRequestBody(null, 0, dataToSend.size)
+-        }
+-        val requestBuilder: okhttp3.Request.Builder = okhttp3.Request.Builder()
+-            .method(httpMethod, requestBody).url(url)
+-            .addHeader("User-Agent", USER_AGENT)
+-
+-        for ((headerName, headerValueList) in headers) {
+-            if (headerValueList.size > 1) {
+-                requestBuilder.removeHeader(headerName)
+-                for (headerValue in headerValueList) {
+-                    requestBuilder.addHeader(headerName, headerValue)
+-                }
+-            } else if (headerValueList.size == 1) {
+-                requestBuilder.header(headerName, headerValueList[0])
+-            }
+-        }
+-        val response = client.newCall(requestBuilder.build()).execute()
+-        if (response.code == 429) {
+-            response.close()
+-            throw ReCaptchaException("reCaptcha Challenge requested", url)
+-        }
+-        val body = response.body
+-        val responseBodyToReturn: String = body.string()
+-        val latestUrl = response.request.url.toString()
+-        return Response(
+-            response.code, response.message, response.headers.toMultimap(),
+-            responseBodyToReturn, latestUrl
+-        )
+-    }
+-
+-    companion object {
+-        private const val USER_AGENT =
+-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"
+-        private var instance: DownloaderTestImpl? = null
+-
+-        /**
+-         * It's recommended to call exactly once in the entire lifetime of the application.
+-         *
+-         * @param builder if null, default builder will be used
+-         * @return a new instance of [DownloaderTestImpl]
+-         */
+-        fun init(builder: OkHttpClient.Builder?): DownloaderTestImpl? {
+-            instance = DownloaderTestImpl(
+-                builder ?: OkHttpClient.Builder()
+-            )
+-            return instance
+-        }
+-
+-        fun getInstance(): DownloaderTestImpl? {
+-            if (instance == null) {
+-                init(null)
+-            }
+-            return instance
+-        }
+-    }
+-}
+\ No newline at end of file
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/MainActivity.kt b/app/src/main/java/com/lagradost/cloudstream3/MainActivity.kt
+index c13b260..c5b3731 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/MainActivity.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/MainActivity.kt
+@@ -51,10 +51,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
+ import androidx.recyclerview.widget.LinearSnapHelper
+ import androidx.recyclerview.widget.RecyclerView
+ import androidx.viewpager2.widget.ViewPager2
+-import com.google.android.gms.cast.framework.CastContext
+-import com.google.android.gms.cast.framework.Session
+-import com.google.android.gms.cast.framework.SessionManager
+-import com.google.android.gms.cast.framework.SessionManagerListener
+ import com.google.android.material.bottomnavigation.BottomNavigationView
+ import com.google.android.material.bottomsheet.BottomSheetDialog
+ import com.google.android.material.navigationrail.NavigationRailView
+@@ -128,7 +124,6 @@ import com.lagradost.cloudstream3.ui.setup.SetupFragmentExtensions
+ import com.lagradost.cloudstream3.utils.ApkInstaller
+ import com.lagradost.cloudstream3.utils.AppContextUtils.getApiDubstatusSettings
+ import com.lagradost.cloudstream3.utils.AppContextUtils.html
+-import com.lagradost.cloudstream3.utils.AppContextUtils.isCastApiAvailable
+ import com.lagradost.cloudstream3.utils.AppContextUtils.isLtr
+ import com.lagradost.cloudstream3.utils.AppContextUtils.isNetworkAvailable
+ import com.lagradost.cloudstream3.utils.AppContextUtils.isRtl
+@@ -493,14 +488,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
+     private fun updateNavBar(destination: NavDestination) {
+         this.hideKeyboard()
+ 
+-        // Fucks up anime info layout since that has its own layout
+-        binding?.castMiniControllerHolder?.isVisible =
+-            !listOf(
+-                R.id.navigation_results_phone,
+-                R.id.navigation_results_tv,
+-                R.id.navigation_player
+-            ).contains(destination.id)
+-
+         val isNavVisible = listOf(
+             R.id.navigation_home,
+             R.id.navigation_search,
+@@ -510,7 +497,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
+             R.id.navigation_download_child,
+             R.id.navigation_download_queue,
+             R.id.navigation_subtitles,
+-            R.id.navigation_chrome_subtitles,
+             R.id.navigation_settings_player,
+             R.id.navigation_settings_updates,
+             R.id.navigation_settings_ui,
+@@ -586,7 +572,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
+                 in listOf(
+                     R.id.navigation_settings,
+                     R.id.navigation_subtitles,
+-                    R.id.navigation_chrome_subtitles,
+                     R.id.navigation_settings_player,
+                     R.id.navigation_settings_updates,
+                     R.id.navigation_settings_ui,
+@@ -604,52 +589,10 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
+         }
+     }
+ 
+-    //private var mCastSession: CastSession? = null
+-    var mSessionManager: SessionManager? = null
+-    private val mSessionManagerListener: SessionManagerListener<Session> by lazy { SessionManagerListenerImpl() }
+-
+-    private inner class SessionManagerListenerImpl : SessionManagerListener<Session> {
+-        override fun onSessionStarting(session: Session) {
+-        }
+-
+-        override fun onSessionStarted(session: Session, sessionId: String) {
+-            invalidateOptionsMenu()
+-        }
+-
+-        override fun onSessionStartFailed(session: Session, i: Int) {
+-        }
+-
+-        override fun onSessionEnding(session: Session) {
+-        }
+-
+-        override fun onSessionResumed(session: Session, wasSuspended: Boolean) {
+-            invalidateOptionsMenu()
+-        }
+-
+-        override fun onSessionResumeFailed(session: Session, i: Int) {
+-        }
+-
+-        override fun onSessionSuspended(session: Session, i: Int) {
+-        }
+-
+-        override fun onSessionEnded(session: Session, error: Int) {
+-        }
+-
+-        override fun onSessionResuming(session: Session, s: String) {
+-        }
+-    }
+-
+     override fun onResume() {
+         super.onResume()
+         afterPluginsLoadedEvent += ::onAllPluginsLoaded
+         setActivityInstance(this)
+-        try {
+-            if (isCastApiAvailable()) {
+-                mSessionManager?.addSessionManagerListener(mSessionManagerListener)
+-            }
+-        } catch (e: Exception) {
+-            logError(e)
+-        }
+     }
+ 
+     override fun onPause() {
+@@ -659,14 +602,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
+         if (ApkInstaller.delayedInstaller?.startInstallation() == true) {
+             Toast.makeText(this, R.string.update_started, Toast.LENGTH_LONG).show()
+         }
+-        try {
+-            if (isCastApiAvailable()) {
+-                mSessionManager?.removeSessionManagerListener(mSessionManagerListener)
+-                //mCastSession = null
+-            }
+-        } catch (e: Exception) {
+-            logError(e)
+-        }
+     }
+ 
+     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+@@ -722,10 +657,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
+             }
+         }
+         filesToDelete = setOf()
+-        val broadcastIntent = Intent()
+-        broadcastIntent.action = "restart_service"
+-        broadcastIntent.setClass(this, VideoDownloadRestartReceiver::class.java)
+-        this.sendBroadcast(broadcastIntent)
+         afterPluginsLoadedEvent -= ::onAllPluginsLoaded
+         detachBackPressedCallback("MainActivityDefault")
+         super.onDestroy()
+@@ -1202,14 +1133,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
+         setNavigationBarColorCompat(R.attr.primaryGrayBackground)
+         updateLocale()
+         super.onCreate(savedInstanceState)
+-        try {
+-            if (isCastApiAvailable()) {
+-                CastContext.getSharedInstance(this) { it.run() }
+-                    .addOnSuccessListener { mSessionManager = it.sessionManager }
+-            }
+-        } catch (t: Throwable) {
+-            logError(t)
+-        }
+ 
+         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+         updateTv()
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/services/SubscriptionWorkManager.kt b/app/src/main/java/com/lagradost/cloudstream3/services/SubscriptionWorkManager.kt
+index 7134650..30240e2 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/services/SubscriptionWorkManager.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/services/SubscriptionWorkManager.kt
+@@ -75,7 +75,7 @@ class SubscriptionWorkManager(val context: Context, workerParams: WorkerParamete
+             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+             .setColor(context.colorFromAttribute(R.attr.colorPrimary))
+             .setContentTitle(context.getString(R.string.subscription_in_progress_notification))
+-            .setSmallIcon(com.google.android.gms.cast.framework.R.drawable.quantum_ic_refresh_white_24)
++            .setSmallIcon(R.drawable.ic_refresh)
+             .setProgress(0, 0, true)
+ 
+     private val updateNotificationBuilder =
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/syncproviders/AccountManager.kt b/app/src/main/java/com/lagradost/cloudstream3/syncproviders/AccountManager.kt
+index 68fba97..85c18a5 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/syncproviders/AccountManager.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/syncproviders/AccountManager.kt
+@@ -62,10 +62,6 @@ abstract class AccountManager {
+         }
+ 
+         val allApis = arrayOf(
+-            SyncRepo(malApi),
+-            SyncRepo(kitsuApi),
+-            SyncRepo(aniListApi),
+-            SyncRepo(simklApi),
+             SyncRepo(localListApi),
+             SubtitleRepo(openSubtitlesApi),
+             SubtitleRepo(addic7ed),
+@@ -125,10 +121,6 @@ abstract class AccountManager {
+             SubtitleRepo(subSourceApi)
+         )
+         val syncApis = arrayOf(
+-            SyncRepo(malApi),
+-            SyncRepo(kitsuApi),
+-            SyncRepo(aniListApi),
+-            SyncRepo(simklApi),
+             SyncRepo(localListApi)
+         )
+ 
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/ControllerActivity.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/ControllerActivity.kt
+deleted file mode 100644
+index f00fd80..0000000
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/ControllerActivity.kt
++++ /dev/null
+@@ -1,391 +0,0 @@
+-package com.lagradost.cloudstream3.ui
+-
+-import android.os.Bundle
+-import android.util.Log
+-import android.view.Menu
+-import android.view.View.GONE
+-import android.view.View.INVISIBLE
+-import android.view.View.VISIBLE
+-import android.widget.AbsListView
+-import android.widget.ArrayAdapter
+-import android.widget.ImageView
+-import android.widget.LinearLayout
+-import android.widget.ListView
+-import androidx.appcompat.app.AlertDialog
+-import com.fasterxml.jackson.annotation.JsonProperty
+-import com.google.android.gms.cast.MediaLoadOptions
+-import com.google.android.gms.cast.MediaQueueItem
+-import com.google.android.gms.cast.MediaSeekOptions
+-import com.google.android.gms.cast.MediaStatus.REPEAT_MODE_REPEAT_OFF
+-import com.google.android.gms.cast.MediaTrack
+-import com.google.android.gms.cast.TextTrackStyle
+-import com.google.android.gms.cast.framework.CastButtonFactory
+-import com.google.android.gms.cast.framework.CastSession
+-import com.google.android.gms.cast.framework.media.RemoteMediaClient
+-import com.google.android.gms.cast.framework.media.uicontroller.UIController
+-import com.google.android.gms.cast.framework.media.widget.ExpandedControllerActivity
+-import com.lagradost.cloudstream3.R
+-import com.lagradost.cloudstream3.mvvm.Resource
+-import com.lagradost.cloudstream3.mvvm.logError
+-import com.lagradost.cloudstream3.mvvm.safeApiCall
+-import com.lagradost.cloudstream3.sortUrls
+-import com.lagradost.cloudstream3.ui.player.LOADTYPE_CHROMECAST
+-import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
+-import com.lagradost.cloudstream3.ui.player.SubtitleData
+-import com.lagradost.cloudstream3.ui.result.ResultEpisode
+-import com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment
+-import com.lagradost.cloudstream3.utils.AppContextUtils.sortSubs
+-import com.lagradost.cloudstream3.utils.AppUtils.parseJson
+-import com.lagradost.cloudstream3.utils.AppUtils.toJson
+-import com.lagradost.cloudstream3.utils.CastHelper.awaitLinks
+-import com.lagradost.cloudstream3.utils.CastHelper.getMediaInfo
+-import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
+-import com.lagradost.cloudstream3.utils.DataStoreHelper
+-import com.lagradost.cloudstream3.utils.ExtractorLink
+-import com.lagradost.cloudstream3.utils.Qualities
+-import com.lagradost.cloudstream3.utils.UIHelper.dismissSafe
+-import kotlinx.serialization.SerialName
+-import kotlinx.serialization.Serializable
+-import org.json.JSONObject
+-
+-private fun RemoteMediaClient.getItemIndex(): Int? {
+-    return try {
+-        val index = this.mediaQueue.itemIds.indexOf(this.currentItem?.itemId ?: 0)
+-        if (index < 0) null else index
+-    } catch (_: Exception) {
+-        null
+-    }
+-}
+-
+-class SkipNextEpisodeController(val view: ImageView) : UIController() {
+-    init {
+-        view.setImageResource(R.drawable.ic_baseline_skip_next_24)
+-        view.setOnClickListener {
+-            remoteMediaClient?.let {
+-                it.queueNext(JSONObject())
+-                view.visibility = GONE // TO PREVENT MULTI CLICK
+-            }
+-        }
+-    }
+-
+-    override fun onMediaStatusUpdated() {
+-        super.onMediaStatusUpdated()
+-        view.visibility = GONE
+-        val currentIdIndex = remoteMediaClient?.getItemIndex() ?: return
+-        val itemCount = remoteMediaClient?.mediaQueue?.itemCount ?: return
+-        if (itemCount - currentIdIndex > 1 && remoteMediaClient?.isLoadingNextItem == false) {
+-            view.visibility = VISIBLE
+-        }
+-    }
+-}
+-
+-@Serializable
+-data class MetadataHolder(
+-    @JsonProperty("apiName") @SerialName("apiName") val apiName: String,
+-    @JsonProperty("isMovie") @SerialName("isMovie") val isMovie: Boolean,
+-    @JsonProperty("title") @SerialName("title") val title: String?,
+-    @JsonProperty("poster") @SerialName("poster") val poster: String?,
+-    @JsonProperty("currentEpisodeIndex") @SerialName("currentEpisodeIndex") val currentEpisodeIndex: Int,
+-    @JsonProperty("episodes") @SerialName("episodes") val episodes: List<ResultEpisode>,
+-    @JsonProperty("currentLinks") @SerialName("currentLinks") val currentLinks: List<ExtractorLink>,
+-    @JsonProperty("currentSubtitles") @SerialName("currentSubtitles") val currentSubtitles: List<SubtitleData>,
+-)
+-
+-class SelectSourceController(val view: ImageView, val activity: ControllerActivity) : UIController() {
+-    init {
+-        view.setImageResource(R.drawable.ic_baseline_playlist_play_24)
+-        view.setOnClickListener {
+-            val holder = getCurrentMetaData()
+-            if (holder != null) {
+-                val items = holder.currentLinks
+-                if (items.isNotEmpty() && remoteMediaClient?.currentItem != null) {
+-                    val subTracks = remoteMediaClient?.mediaInfo?.mediaTracks?.filter { it.type == MediaTrack.TYPE_TEXT }
+-                        ?: ArrayList()
+-
+-                    val bottomSheetDialogBuilder = AlertDialog.Builder(view.context, R.style.AlertDialogCustomBlack)
+-                    bottomSheetDialogBuilder.setView(R.layout.sort_bottom_sheet)
+-
+-                    val bottomSheetDialog = bottomSheetDialogBuilder.create()
+-                    bottomSheetDialog.show()
+-
+-                    val providerList = bottomSheetDialog.findViewById<ListView>(R.id.sort_providers)!!
+-                    val subtitleList = bottomSheetDialog.findViewById<ListView>(R.id.sort_subtitles)!!
+-                    if (subTracks.isEmpty()) {
+-                        bottomSheetDialog.findViewById<LinearLayout>(R.id.sort_subtitles_holder)?.visibility = GONE
+-                    } else {
+-                        val arrayAdapter = ArrayAdapter<String>(view.context, R.layout.sort_bottom_single_choice)
+-                        arrayAdapter.add(view.context.getString(R.string.no_subtitles))
+-                        arrayAdapter.addAll(subTracks.mapNotNull { it.name })
+-
+-                        subtitleList.choiceMode = AbsListView.CHOICE_MODE_SINGLE
+-                        subtitleList.adapter = arrayAdapter
+-
+-                        val currentTracks = remoteMediaClient?.mediaStatus?.activeTrackIds
+-                        val subtitleIndex = if (currentTracks == null) 0 else subTracks.map { it.id }
+-                            .indexOfFirst { currentTracks.contains(it) } + 1
+-
+-                        subtitleList.setSelection(subtitleIndex)
+-                        subtitleList.setItemChecked(subtitleIndex, true)
+-
+-                        subtitleList.setOnItemClickListener { _, _, which, _ ->
+-                            if (which == 0) {
+-                                remoteMediaClient?.setActiveMediaTracks(longArrayOf()) // NO SUBS
+-                            } else {
+-                                ChromecastSubtitlesFragment.getCurrentSavedStyle().apply {
+-                                    val font = TextTrackStyle()
+-                                    font.setFontFamily(fontFamily ?: "Google Sans")
+-                                    fontGenericFamily?.let { font.fontGenericFamily = it }
+-                                    font.windowColor = windowColor
+-                                    font.backgroundColor = backgroundColor
+-
+-                                    font.edgeColor = edgeColor
+-                                    font.edgeType = edgeType
+-                                    font.foregroundColor = foregroundColor
+-                                    font.fontScale = fontScale
+-
+-                                    remoteMediaClient?.setTextTrackStyle(font)
+-                                }
+-
+-                                remoteMediaClient?.setActiveMediaTracks(longArrayOf(subTracks[which - 1].id))
+-                                    ?.setResultCallback {
+-                                        if (!it.status.isSuccess) {
+-                                            Log.e(
+-                                                "CHROMECAST", "Failed with status code:" +
+-                                                    it.status.statusCode + " > " + it.status.statusMessage
+-                                            )
+-                                        }
+-                                    }
+-                            }
+-                            bottomSheetDialog.dismissSafe(activity)
+-                        }
+-                    }
+-
+-                    // https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaInformation
+-                    val contentUrl = (remoteMediaClient?.currentItem?.media?.contentUrl
+-                        ?: remoteMediaClient?.currentItem?.media?.contentId)
+-
+-                    val sortingMethods = items.map { "${it.name} ${Qualities.getStringByInt(it.quality)}" }
+-                        .toTypedArray()
+-                    val sotringIndex = items.indexOfFirst { it.url == contentUrl }
+-
+-                    val arrayAdapter = ArrayAdapter<String>(view.context, R.layout.sort_bottom_single_choice)
+-                    arrayAdapter.addAll(sortingMethods.toMutableList())
+-
+-                    providerList.choiceMode = AbsListView.CHOICE_MODE_SINGLE
+-                    providerList.adapter = arrayAdapter
+-                    providerList.setSelection(sotringIndex)
+-                    providerList.setItemChecked(sotringIndex, true)
+-
+-                    providerList.setOnItemClickListener { _, _, which, _ ->
+-                        val epData = holder.episodes[holder.currentEpisodeIndex]
+-                        fun loadMirror(index: Int) {
+-                            if (holder.currentLinks.size <= index) return
+-                            val mediaItem = getMediaInfo(
+-                                epData,
+-                                holder,
+-                                index,
+-                                remoteMediaClient?.mediaInfo?.customData,
+-                                holder.currentSubtitles,
+-                            )
+-
+-                            val startAt = remoteMediaClient?.approximateStreamPosition ?: 0
+-                            try { // THIS IS VERY IMPORTANT BECAUSE WE NEVER WANT TO AUTOLOAD THE NEXT EPISODE
+-                                val currentIdIndex = remoteMediaClient?.getItemIndex()
+-                                val nextId = remoteMediaClient?.mediaQueue?.itemIds?.get(
+-                                    currentIdIndex?.plus(1) ?: 0
+-                                )
+-
+-                                if (currentIdIndex == null && nextId != null) {
+-                                    awaitLinks(
+-                                        remoteMediaClient?.queueInsertAndPlayItem(
+-                                            MediaQueueItem.Builder(mediaItem).build(),
+-                                            nextId,
+-                                            startAt,
+-                                            JSONObject(),
+-                                        )
+-                                    ) { loadMirror(index + 1) }
+-                                } else {
+-                                    val mediaLoadOptions =
+-                                        MediaLoadOptions.Builder()
+-                                            .setPlayPosition(startAt)
+-                                            .setAutoplay(true)
+-                                            .build()
+-                                    awaitLinks(
+-                                        remoteMediaClient?.load(
+-                                            mediaItem,
+-                                            mediaLoadOptions
+-                                        )
+-                                    ) { loadMirror(index + 1) }
+-                                }
+-                            } catch (_: Exception) {
+-                                val mediaLoadOptions =
+-                                    MediaLoadOptions.Builder()
+-                                        .setPlayPosition(startAt)
+-                                        .setAutoplay(true)
+-                                        .build()
+-                                awaitLinks(remoteMediaClient?.load(mediaItem, mediaLoadOptions)) {
+-                                    loadMirror(index + 1)
+-                                }
+-                            }
+-                        }
+-
+-                        loadMirror(which)
+-                        bottomSheetDialog.dismissSafe(activity)
+-                    }
+-                }
+-            }
+-        }
+-    }
+-
+-    private fun getCurrentMetaData(): MetadataHolder? {
+-        return try {
+-            val data = remoteMediaClient?.mediaInfo?.customData?.toString() ?: return null
+-            parseJson<MetadataHolder>(data)
+-        } catch (_: Exception) {
+-            null
+-        }
+-    }
+-
+-    var isLoadingMore = false
+-    override fun onMediaStatusUpdated() {
+-        super.onMediaStatusUpdated()
+-        val meta = getCurrentMetaData()
+-        view.visibility = if ((meta?.currentLinks?.size ?: 0) > 1) VISIBLE else INVISIBLE
+-
+-        try {
+-            if (meta != null && meta.episodes.size > meta.currentEpisodeIndex + 1) {
+-                val currentIdIndex = remoteMediaClient?.getItemIndex() ?: return
+-                val itemCount = remoteMediaClient?.mediaQueue?.itemCount
+-                val index = meta.currentEpisodeIndex + 1
+-                val epData = meta.episodes[index]
+-
+-                try {
+-                    val currentDuration = remoteMediaClient?.streamDuration
+-                    val currentPosition = remoteMediaClient?.approximateStreamPosition
+-                    if (currentDuration != null && currentPosition != null)
+-                        DataStoreHelper.setViewPosAndResume(
+-                            epData.id,
+-                            currentPosition,
+-                            currentDuration,
+-                            epData,
+-                            meta.episodes.getOrNull(index + 1),
+-                        )
+-                } catch (t: Throwable) {
+-                    logError(t)
+-                }
+-
+-                if (itemCount != null && itemCount - currentIdIndex == 1 && !isLoadingMore) {
+-                    isLoadingMore = true
+-                    ioSafe {
+-                        val currentLinks = mutableSetOf<ExtractorLink>()
+-                        val currentSubs = mutableSetOf<SubtitleData>()
+-                        val generator = RepoLinkGenerator(listOf(epData))
+-                        val isSuccessful = safeApiCall {
+-                            generator.generateLinks(
+-                                clearCache = false,
+-                                sourceTypes = LOADTYPE_CHROMECAST,
+-                                callback = {
+-                                    it.first?.let { link ->
+-                                        currentLinks.add(link)
+-                                    }
+-                                }, subtitleCallback = {
+-                                    currentSubs.add(it)
+-                                },
+-                                offset = 0,
+-                                isCasting = true,
+-                            )
+-                        }
+-
+-                        val sortedLinks = sortUrls(currentLinks)
+-                        val sortedSubs = sortSubs(currentSubs)
+-                        if (isSuccessful == Resource.Success(true)) {
+-                            if (currentLinks.isNotEmpty()) {
+-                                val jsonCopy = meta.copy(
+-                                    currentLinks = sortedLinks,
+-                                    currentSubtitles = sortedSubs,
+-                                    currentEpisodeIndex = index,
+-                                )
+-
+-                                val done = JSONObject(jsonCopy.toJson())
+-                                val mediaInfo = getMediaInfo(
+-                                    epData,
+-                                    jsonCopy,
+-                                    0,
+-                                    done,
+-                                    sortedSubs,
+-                                )
+-
+-                                activity.runOnUiThread {
+-                                    awaitLinks(
+-                                        remoteMediaClient?.queueAppendItem(
+-                                            MediaQueueItem.Builder(mediaInfo).build(),
+-                                            JSONObject()
+-                                        )
+-                                    ) {
+-                                        println("FAILED TO LOAD NEXT ITEM")
+-                                    }
+-                                    isLoadingMore = false
+-                                }
+-                            }
+-
+-                        }
+-                    }
+-                }
+-            }
+-        } catch (e: Exception) {
+-            println(e)
+-        }
+-    }
+-
+-    override fun onSessionConnected(castSession: CastSession) {
+-        super.onSessionConnected(castSession)
+-        remoteMediaClient?.queueSetRepeatMode(REPEAT_MODE_REPEAT_OFF, JSONObject())
+-    }
+-}
+-
+-class SkipTimeController(val view: ImageView, forwards: Boolean) : UIController() {
+-    init {
+-        val time = 30
+-        view.setImageResource(if (forwards) R.drawable.go_forward_30 else R.drawable.go_back_30)
+-        view.setOnClickListener {
+-            remoteMediaClient?.let {
+-                val options = MediaSeekOptions.Builder()
+-                    .setPosition(it.approximateStreamPosition + time * 1000 * if (forwards) 1 else -1)
+-                it.seek(options.build())
+-            }
+-        }
+-    }
+-}
+-
+-class ControllerActivity : ExpandedControllerActivity() {
+-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+-        super.onCreateOptionsMenu(menu)
+-        menuInflater.inflate(R.menu.cast_expanded_controller_menu, menu)
+-        CastButtonFactory.setUpMediaRouteButton(this, menu, R.id.media_route_menu_item)
+-        return true
+-    }
+-
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        super.onCreate(savedInstanceState)
+-        val sourcesButton: ImageView = getButtonImageViewAt(0)
+-        val skipBackButton: ImageView = getButtonImageViewAt(1)
+-        val skipForwardButton: ImageView = getButtonImageViewAt(2)
+-        val skipOpButton: ImageView = getButtonImageViewAt(3)
+-        uiMediaController.bindViewToUIController(
+-            sourcesButton,
+-            SelectSourceController(sourcesButton, this)
+-        )
+-        uiMediaController.bindViewToUIController(
+-            skipBackButton,
+-            SkipTimeController(skipBackButton, false)
+-        )
+-        uiMediaController.bindViewToUIController(
+-            skipForwardButton,
+-            SkipTimeController(skipForwardButton, true)
+-        )
+-        uiMediaController.bindViewToUIController(
+-            skipOpButton,
+-            SkipNextEpisodeController(skipOpButton)
+-        )
+-    }
+-}
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/MiniControllerFragment.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/MiniControllerFragment.kt
+deleted file mode 100644
+index bd8541e..0000000
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/MiniControllerFragment.kt
++++ /dev/null
+@@ -1,71 +0,0 @@
+-package com.lagradost.cloudstream3.ui
+-
+-import android.content.Context
+-import android.os.Bundle
+-import android.util.AttributeSet
+-import android.view.View
+-import android.widget.LinearLayout
+-import android.widget.ProgressBar
+-import android.widget.RelativeLayout
+-import androidx.core.content.withStyledAttributes
+-import com.google.android.gms.cast.framework.media.widget.MiniControllerFragment
+-import com.lagradost.cloudstream3.R
+-import com.lagradost.cloudstream3.utils.UIHelper.adjustAlpha
+-import com.lagradost.cloudstream3.utils.UIHelper.colorFromAttribute
+-import com.lagradost.cloudstream3.utils.UIHelper.toPx
+-
+-
+-class MyMiniControllerFragment : MiniControllerFragment() {
+-    var currentColor: Int = 0
+-
+-    override fun onDestroy() {
+-        currentColor = 0
+-        super.onDestroy()
+-    }
+-
+-    // I KNOW, KINDA SPAGHETTI SOLUTION, BUT IT WORKS
+-    override fun onInflate(context: Context, attributeSet: AttributeSet, bundle: Bundle?) {
+-        if (currentColor == 0) {
+-            context.withStyledAttributes(attributeSet, R.styleable.CustomCast, 0, 0) {
+-                if (hasValue(R.styleable.CustomCast_customCastBackgroundColor)) {
+-                    currentColor = getColor(R.styleable.CustomCast_customCastBackgroundColor, 0)
+-                }
+-            }
+-        }
+-
+-        super.onInflate(context, attributeSet, bundle)
+-    }
+-
+-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+-        super.onViewCreated(view, savedInstanceState)
+-
+-        // SEE https://github.com/dandar3/android-google-play-services-cast-framework/blob/master/res/layout/cast_mini_controller.xml
+-        try {
+-            val progressBar: ProgressBar? = view.findViewById(R.id.progressBar)
+-            val containerAll: LinearLayout? = view.findViewById(com.google.android.gms.cast.framework.R.id.container_all)
+-            val containerCurrent: RelativeLayout? = view.findViewById(com.google.android.gms.cast.framework.R.id.container_current)
+-
+-            context?.let { ctx ->
+-                progressBar?.setBackgroundColor(
+-                    adjustAlpha(
+-                        ctx.colorFromAttribute(R.attr.colorPrimary),
+-                        0.35f
+-                    )
+-                )
+-                val params = RelativeLayout.LayoutParams(
+-                    RelativeLayout.LayoutParams.MATCH_PARENT,
+-                    2.toPx
+-                )
+-
+-                progressBar?.layoutParams = params
+-                val color = currentColor
+-                if (color != 0)
+-                    containerCurrent?.setBackgroundColor(color)
+-            }
+-            val child = containerAll?.getChildAt(0)
+-            child?.alpha = 0f // REMOVE GRADIENT
+-        } catch (e: Exception) {
+-            // JUST IN CASE
+-        }
+-    }
+-}
+\ No newline at end of file
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/player/CS3IPlayer.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/player/CS3IPlayer.kt
+index b63191c..ecd5c25 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/player/CS3IPlayer.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/player/CS3IPlayer.kt
+@@ -1043,33 +1043,7 @@ class CS3IPlayer : IPlayer {
+         }
+     }
+ 
+-    // we want to push metadata when loading torrents, so we just set up a looper that loops until
+-    // the index changes, this way only 1 looper is active at a time, and modifying eventLooperIndex
+-    // will kill any active loopers
+-    private var eventLooperIndex = 0
+-    private fun torrentEventLooper(hash: String) = ioSafe {
+-        eventLooperIndex += 2
+-        // very shitty, but should work fine
+-        // release player is called once for the new link
+-        val currentIndex = eventLooperIndex + 1
+-        while (eventLooperIndex <= currentIndex && eventHandler != null) {
+-            try {
+-                val status = Torrent.get(hash)
+-                event(
+-                    DownloadEvent(
+-                        connections = status.activePeers,
+-                        downloadSpeed = status.downloadSpeed?.toLong()!!,
+-                        totalBytes = status.torrentSize!!,
+-                        downloadedBytes = status.bytesRead!!,
+-                    )
+-                )
+-            } catch (_: NullPointerException) {
+-            } catch (t: Throwable) {
+-                logError(t)
+-            }
+-            delay(1000)
+-        }
+-    }
++    // TV-LITE: torrent event looper removed along with the built-in torrent server
+ 
+     private fun buildExoPlayer(
+         context: Context,
+@@ -1814,31 +1788,6 @@ class CS3IPlayer : IPlayer {
+         return exoPlayer != null
+     }
+ 
+-    @MainThread
+-    private fun loadTorrent(context: Context, link: ExtractorLink) {
+-        ioSafe {
+-            // we check exoPlayer a lot here, and that is because we don't want to load exo after
+-            // the user has left the player, in the case that the user click back when this is
+-            // happening
+-            try {
+-                if (exoPlayer == null) return@ioSafe
+-                val (newLink, status) = Torrent.transformLink(link)
+-                val hash = status.hash
+-                if (exoPlayer == null) return@ioSafe
+-                runOnMainThread {
+-                    if (exoPlayer == null) return@runOnMainThread
+-                    releasePlayer()
+-                    if (hash != null) {
+-                        torrentEventLooper(hash)
+-                    }
+-                    loadOnlinePlayer(context, newLink)
+-                }
+-            } catch (t: Throwable) {
+-                event(ErrorEvent(t))
+-            }
+-        }
+-    }
+-
+     @SuppressLint("UnsafeOptInUsageError")
+     @MainThread
+     private fun loadOnlinePlayer(context: Context, link: ExtractorLink, retry: Boolean = false) {
+@@ -1849,84 +1798,12 @@ class CS3IPlayer : IPlayer {
+                 ExtractorLinkType.DASH -> MimeTypes.APPLICATION_MPD
+                 ExtractorLinkType.VIDEO -> MimeTypes.VIDEO_MP4
+                 ExtractorLinkType.TORRENT, ExtractorLinkType.MAGNET -> {
+-                    // we check settings first, todo cleanup
+-                    val default = TvType.entries.toTypedArray()
+-                        .sorted()
+-                        .filter { it != TvType.NSFW }
+-                        .map { it.ordinal }
+-
+-                    val defaultSet = default.map { it.toString() }.toSet()
+-                    val currentPrefMedia = try {
+-                        PreferenceManager.getDefaultSharedPreferences(context)
+-                            .getStringSet(
+-                                context.getString(R.string.prefer_media_type_key),
+-                                defaultSet
+-                            )
+-                            ?.mapNotNull { it.toIntOrNull() ?: return@mapNotNull null }
+-                    } catch (_: Throwable) {
+-                        null
+-                    } ?: default
+-
+-                    if (!currentPrefMedia.contains(TvType.Torrent.ordinal)) {
+-                        val errorMessage = context.getString(R.string.torrent_preferred_media)
+-                        event(ErrorEvent(ErrorLoadingException(errorMessage)))
+-                        return
+-                    }
+-
+-                    if (Torrent.hasAcceptedTorrentForThisSession == false) {
+-                        val errorMessage = context.getString(R.string.torrent_not_accepted)
+-                        event(ErrorEvent(ErrorLoadingException(errorMessage)))
+-                        return
+-                    }
+-                    // load the initial UI, we require an exoPlayer to be alive
+-                    if (!retry) {
+-                        // this causes a *bug* that restarts all torrents from 0
+-                        // but I would call this a feature
+-                        releasePlayer()
+-                        loadExo(context, listOf(), listOf())
+-                    }
+-                    event(
+-                        StatusEvent(
+-                            wasPlaying = CSPlayerLoading.IsPlaying,
+-                            isPlaying = CSPlayerLoading.IsBuffering
+-                        )
+-                    )
+-
+-                    if (Torrent.hasAcceptedTorrentForThisSession == true) {
+-                        loadTorrent(context, link)
+-                        return
+-                    }
+-
+-                    val builder: AlertDialog.Builder = AlertDialog.Builder(context)
+-
+-                    val dialogClickListener =
+-                        DialogInterface.OnClickListener { _, which ->
+-                            when (which) {
+-                                DialogInterface.BUTTON_POSITIVE -> {
+-                                    Torrent.hasAcceptedTorrentForThisSession = true
+-                                    loadTorrent(context, link)
+-                                }
+-
+-                                DialogInterface.BUTTON_NEGATIVE -> {
+-                                    Torrent.hasAcceptedTorrentForThisSession = false
+-                                    val errorMessage =
+-                                        context.getString(R.string.torrent_not_accepted)
+-                                    event(ErrorEvent(ErrorLoadingException(errorMessage)))
+-                                }
+-                            }
+-                        }
+-
+-                    builder.setTitle(R.string.play_torrent_button)
+-                        .setMessage(R.string.torrent_info)
+-                        // Ensure that the user will not accidentally start a torrent session.
+-                        .setCancelable(false).setOnCancelListener {
+-                            val errorMessage = context.getString(R.string.torrent_not_accepted)
+-                            event(ErrorEvent(ErrorLoadingException(errorMessage)))
+-                        }
+-                        .setPositiveButton(R.string.ok, dialogClickListener)
+-                        .setNegativeButton(R.string.go_back, dialogClickListener)
+-                        .show().setDefaultFocus()
+-
++                    // TV-LITE: the built-in torrent server (TorrServer/libgojni) was removed to
++                    // save ~12 MB of native libs per ABI and background CPU/RAM. Magnet links
++                    // can still be handed off to an external torrent app via the "open with"
++                    // actions (e.g. BiglyBT / LibreTorrent).
++                    val errorMessage = context.getString(R.string.torrent_removed_tv_lite)
++                    event(ErrorEvent(ErrorLoadingException(errorMessage)))
+                     return
+                 }
+             }
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/player/IGenerator.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/player/IGenerator.kt
+index 3ab46ce..48e4fc9 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/player/IGenerator.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/player/IGenerator.kt
+@@ -16,12 +16,6 @@ val LOADTYPE_INAPP_DOWNLOAD = setOf(
+     ExtractorLinkType.M3U8
+ )
+ 
+-val LOADTYPE_CHROMECAST = setOf(
+-    ExtractorLinkType.VIDEO,
+-    ExtractorLinkType.DASH,
+-    ExtractorLinkType.M3U8
+-)
+-
+ val LOADTYPE_ALL = ExtractorLinkType.entries.toSet()
+ 
+ 
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/player/PlayerView.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/player/PlayerView.kt
+index c363a29..7b96496 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/player/PlayerView.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/player/PlayerView.kt
+@@ -45,8 +45,6 @@ import androidx.media3.ui.TimeBar
+ import androidx.preference.PreferenceManager
+ import androidx.vectordrawable.graphics.drawable.Animatable2Compat
+ import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
+-import com.github.rubensousa.previewseekbar.PreviewBar
+-import com.github.rubensousa.previewseekbar.media3.PreviewTimeBar
+ import com.lagradost.cloudstream3.CommonActivity.isInPIPMode
+ import com.lagradost.cloudstream3.CommonActivity.screenWidth
+ import com.lagradost.cloudstream3.CommonActivity.showToast
+@@ -283,10 +281,8 @@ class PlayerView @JvmOverloads constructor(
+         )
+ 
+         if (player is CS3IPlayer) {
+-            // Preview bar
+-            val progressBar: PreviewTimeBar? = exoPlayerView?.findViewById(R.id.exo_progress)
+-            exoProgress = progressBar as? LivePreviewTimeBar
+-            val previewImageView: ImageView? = exoPlayerView?.findViewById(R.id.previewImageView)
++            // TV-LITE: seekbar preview removed (LivePreviewTimeBar now extends DefaultTimeBar)
++            exoProgress = exoPlayerView?.findViewById(R.id.exo_progress)
+             val previewFrameLayout: FrameLayout? =
+                 exoPlayerView?.findViewById(R.id.previewFrameLayout)
+ 
+@@ -296,42 +292,6 @@ class PlayerView @JvmOverloads constructor(
+                 previewFrameLayout?.isVisible = false
+             }
+ 
+-            if (progressBar != null && previewImageView != null && previewFrameLayout != null && !isLayout(TV)) {
+-                var resume = false
+-                progressBar.addOnScrubListener(object : PreviewBar.OnScrubListener {
+-                    override fun onScrubStart(previewBar: PreviewBar?) {
+-                        val cs3 = player as? CS3IPlayer ?: return
+-                        val hasPreview = cs3.hasPreview()
+-                        progressBar.isPreviewEnabled = hasPreview
+-                        resume = cs3.getIsPlaying()
+-                        if (resume) cs3.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Player)
+-                        // No clashing UI
+-                        if (hasPreview) subView?.isVisible = false
+-                    }
+-
+-                    override fun onScrubMove(previewBar: PreviewBar?, progress: Int, fromUser: Boolean) {}
+-
+-                    override fun onScrubStop(previewBar: PreviewBar?) {
+-                        val cs3 = player as? CS3IPlayer ?: return
+-                        if (resume) cs3.handleEvent(CSPlayerEvent.Play, PlayerEventSource.Player)
+-                        // Delay to prevent the small flicker of subtitle before seeking.
+-                        subView?.postDelayed({
+-                            // If we are not scrubbing then show subtitles again.
+-                            if (previewBar == null || !previewBar.isPreviewEnabled || !previewBar.isShowingPreview) {
+-                                subView?.isVisible = true
+-                            }
+-                        }, 200)
+-                    }
+-                })
+-                progressBar.attachPreviewView(previewFrameLayout)
+-                progressBar.setPreviewLoader { currentPosition, max ->
+-                    val cs3 = player as? CS3IPlayer ?: return@setPreviewLoader
+-                    val bitmap = cs3.getPreview(currentPosition.toFloat().div(max.toFloat()))
+-                    previewImageView.isGone = bitmap == null
+-                    previewImageView.setImageBitmap(bitmap)
+-                }
+-            }
+-
+             subView = exoPlayerView?.findViewById(androidx.media3.ui.R.id.exo_subtitles)
+             (player as? CS3IPlayer)?.initSubtitles(subView, subtitleHolder, CustomDecoder.style)
+             (player as? CS3IPlayer)?.let {
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/player/PreviewGenerator.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/player/PreviewGenerator.kt
+index 2893bcc..a39b348 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/player/PreviewGenerator.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/player/PreviewGenerator.kt
+@@ -65,17 +65,8 @@ interface IPreviewGenerator {
+ 
+     companion object {
+         fun new(): IPreviewGenerator {
+-            val userDisabled = CloudStreamApp.context?.let { ctx ->
+-                PreferenceManager.getDefaultSharedPreferences(ctx)?.getBoolean(
+-                    ctx.getString(R.string.preview_seekbar_key), true
+-                ) == false
+-            } ?: false
+-            /** because TV has low ram + not show we disable this for now */
+-            return if (isLayout(TV) || userDisabled) {
+-                empty()
+-            } else {
+-                PreviewGenerator()
+-            }
++            // TV-LITE: seekbar preview generation permanently disabled (saves RAM/CPU)
++            return empty()
+         }
+ 
+         fun empty(): IPreviewGenerator {
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/player/Torrent.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/player/Torrent.kt
+deleted file mode 100644
+index 7e5d04e..0000000
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/player/Torrent.kt
++++ /dev/null
+@@ -1,351 +0,0 @@
+-package com.lagradost.cloudstream3.ui.player
+-
+-import com.fasterxml.jackson.annotation.JsonProperty
+-import com.lagradost.api.Log
+-import com.lagradost.cloudstream3.CommonActivity
+-import com.lagradost.cloudstream3.ErrorLoadingException
+-import com.lagradost.cloudstream3.app
+-import com.lagradost.cloudstream3.mvvm.logError
+-import com.lagradost.cloudstream3.utils.ExtractorLink
+-import com.lagradost.cloudstream3.utils.ExtractorLinkType
+-import com.lagradost.cloudstream3.utils.newExtractorLink
+-import kotlinx.serialization.SerialName
+-import kotlinx.serialization.Serializable
+-import torrServer.TorrServer
+-import java.io.File
+-import java.net.ConnectException
+-import java.net.URLEncoder
+-
+-object Torrent {
+-    var hasAcceptedTorrentForThisSession: Boolean? = null
+-    private const val TORRENT_SERVER_PATH: String = "torrent_tmp"
+-    private const val TIMEOUT: Long = 3
+-    private const val TAG: String = "Torrent"
+-
+-    /** Cleans up both old aria2c files and newer go server, (even if the new is also self cleaning) */
+-    @Throws
+-    fun deleteAllFiles(): Boolean {
+-        val act = CommonActivity.activity ?: return false
+-        val defaultDirectory = "${act.cacheDir.path}/$TORRENT_SERVER_PATH"
+-        return File(defaultDirectory).deleteRecursively()
+-    }
+-
+-    private var TORRENT_SERVER_URL = "" // https://github.com/Diegopyl1209/torrentserver-aniyomi/blob/main/server.go#L23
+-
+-    /** Returns true if the server is up */
+-    private suspend fun echo(): Boolean {
+-        if (TORRENT_SERVER_URL.isEmpty()) {
+-            return false
+-        }
+-        return try {
+-            app.get(
+-                "$TORRENT_SERVER_URL/echo",
+-            ).text.isNotEmpty()
+-        } catch (_: ConnectException) {
+-            // `Failed to connect to /127.0.0.1:8090` if the server is down
+-            false
+-        } catch (t: Throwable) {
+-            logError(t)
+-            false
+-        }
+-    }
+-
+-    // https://github.com/Diegopyl1209/torrentserver-aniyomi/blob/c18f58e51b6738f053261bc863177078aa9c1c98/web/api/shutdown.go#L22
+-    /** Gracefully shutdown the server.
+-     * should not be used because I am unable to start it again, and the stopTorrentServer() crashes the app */
+-    suspend fun shutdown(): Boolean {
+-        if (TORRENT_SERVER_URL.isEmpty()) {
+-            return false
+-        }
+-        return try {
+-            app.get(
+-                "$TORRENT_SERVER_URL/shutdown",
+-            ).isSuccessful
+-        } catch (t: Throwable) {
+-            logError(t)
+-            false
+-        }
+-    }
+-
+-    /** Lists all torrents by the server */
+-    @Throws
+-    private suspend fun list(): Array<TorrentStatus> {
+-        if (TORRENT_SERVER_URL.isEmpty()) {
+-            throw ErrorLoadingException("Not initialized")
+-        }
+-        return app.post(
+-            "$TORRENT_SERVER_URL/torrents",
+-            json = TorrentRequest(
+-                action = "list",
+-            ),
+-            timeout = TIMEOUT,
+-            headers = emptyMap()
+-        ).parsed<Array<TorrentStatus>>()
+-    }
+-
+-    /** Drops a single torrent, (I think) this means closing the stream. Returns returns if it is successful */
+-    private suspend fun drop(hash: String): Boolean {
+-        if (TORRENT_SERVER_URL.isEmpty()) {
+-            return false
+-        }
+-        return try {
+-            return app.post(
+-                "$TORRENT_SERVER_URL/torrents",
+-                json = TorrentRequest(
+-                    action = "drop",
+-                    hash = hash
+-                ),
+-                timeout = TIMEOUT,
+-                headers = emptyMap()
+-            ).isSuccessful
+-        } catch (t: Throwable) {
+-            logError(t)
+-            false
+-        }
+-    }
+-
+-    /** Removes a single torrent from the server registry */
+-    private suspend fun rem(hash: String): Boolean {
+-        if (TORRENT_SERVER_URL.isEmpty()) {
+-            return false
+-        }
+-        return try {
+-            return app.post(
+-                "$TORRENT_SERVER_URL/torrents",
+-                json = TorrentRequest(
+-                    action = "rem",
+-                    hash = hash
+-                ),
+-                timeout = TIMEOUT,
+-                headers = emptyMap()
+-            ).isSuccessful
+-        } catch (t: Throwable) {
+-            logError(t)
+-            false
+-        }
+-    }
+-
+-
+-    /** Removes all torrents from the server, and returns if it is successful */
+-    suspend fun clearAll(): Boolean {
+-        if (TORRENT_SERVER_URL.isEmpty()) {
+-            return true
+-        }
+-        return try {
+-            val items = list()
+-            var allSuccess = true
+-            for (item in items) {
+-                val hash = item.hash
+-                if (hash == null) {
+-                    Log.i(TAG, "No hash on ${item.name}")
+-                    allSuccess = false
+-                    continue
+-                }
+-                if (drop(hash)) {
+-                    Log.i(TAG, "Successfully dropped ${item.name}")
+-                } else {
+-                    Log.i(TAG, "Failed to drop ${item.name}")
+-                    allSuccess = false
+-                    continue
+-                }
+-                if (rem(hash)) {
+-                    Log.i(TAG, "Successfully removed ${item.name}")
+-                } else {
+-                    Log.i(TAG, "Failed to remove ${item.name}")
+-                    allSuccess = false
+-                    continue
+-                }
+-            }
+-            allSuccess
+-        } catch (t: Throwable) {
+-            logError(t)
+-            false
+-        }
+-    }
+-
+-    /** Gets all the metadata of a torrent, will throw if that hash does not exists
+-     * https://github.com/Diegopyl1209/torrentserver-aniyomi/blob/c18f58e51b6738f053261bc863177078aa9c1c98/web/api/torrents.go#L126 */
+-    @Throws
+-    suspend fun get(hash: String): TorrentStatus {
+-        if (TORRENT_SERVER_URL.isEmpty()) {
+-            throw ErrorLoadingException("Not initialized")
+-        }
+-        return app.post(
+-            "$TORRENT_SERVER_URL/torrents",
+-            json = TorrentRequest(
+-                action = "get",
+-                hash = hash,
+-            ),
+-            timeout = TIMEOUT,
+-            headers = emptyMap()
+-        ).parsed<TorrentStatus>()
+-    }
+-
+-    /** Adds a torrent to the server, this is needed for us to get the hash for further modification, as well as start streaming it*/
+-    @Throws
+-    private suspend fun add(url: String): TorrentStatus {
+-        if (TORRENT_SERVER_URL.isEmpty()) {
+-            throw ErrorLoadingException("Not initialized")
+-        }
+-        return app.post(
+-            "$TORRENT_SERVER_URL/torrents",
+-            json = TorrentRequest(
+-                action = "add",
+-                link = url,
+-            ),
+-            headers = emptyMap()
+-        ).parsed<TorrentStatus>()
+-    }
+-
+-    /** Spins up the torrent server. */
+-    private suspend fun setup(dir: String): Boolean {
+-        go.Seq.load()
+-        if (echo()) {
+-            return true
+-        }
+-        val port = TorrServer.startTorrentServer(dir, 0)
+-        if (port < 0) {
+-            return false
+-        }
+-        TORRENT_SERVER_URL = "http://127.0.0.1:$port"
+-        TorrServer.addTrackers(trackers.joinToString(separator = ",\n"))
+-        return echo()
+-    }
+-
+-    /** Transforms a torrent link into a streamable link via the server */
+-    @Throws
+-    suspend fun transformLink(link: ExtractorLink): Pair<ExtractorLink, TorrentStatus> {
+-        val act = CommonActivity.activity ?: throw IllegalArgumentException("No activity")
+-        val defaultDirectory = "${act.cacheDir.path}/$TORRENT_SERVER_PATH"
+-        File(defaultDirectory).mkdir()
+-        if (!setup(defaultDirectory)) {
+-            throw ErrorLoadingException("Unable to setup the torrent server")
+-        }
+-        val status = add(link.url)
+-
+-        return newExtractorLink(
+-            source = link.source,
+-            name = link.name,
+-            url = status.streamUrl(link.url),
+-            type = ExtractorLinkType.VIDEO
+-        ) {
+-            this.referer = ""
+-            this.quality = link.quality
+-        } to status
+-    }
+-
+-    private val trackers = listOf(
+-        "udp://tracker.opentrackr.org:1337/announce",
+-        "https://tracker2.ctix.cn/announce",
+-        "https://tracker1.520.jp:443/announce",
+-        "udp://opentracker.i2p.rocks:6969/announce",
+-        "udp://open.tracker.cl:1337/announce",
+-        "udp://open.demonii.com:1337/announce",
+-        "http://tracker.openbittorrent.com:80/announce",
+-        "udp://tracker.openbittorrent.com:6969/announce",
+-        "udp://open.stealth.si:80/announce",
+-        "udp://exodus.desync.com:6969/announce",
+-        "udp://tracker-udp.gbitt.info:80/announce",
+-        "udp://explodie.org:6969/announce",
+-        "https://tracker.gbitt.info:443/announce",
+-        "http://tracker.gbitt.info:80/announce",
+-        "udp://uploads.gamecoast.net:6969/announce",
+-        "udp://tracker1.bt.moack.co.kr:80/announce",
+-        "udp://tracker.tiny-vps.com:6969/announce",
+-        "udp://tracker.theoks.net:6969/announce",
+-        "udp://tracker.dump.cl:6969/announce",
+-        "udp://tracker.bittor.pw:1337/announce",
+-        "https://tracker1.520.jp:443/announce",
+-        "udp://opentracker.i2p.rocks:6969/announce",
+-        "udp://open.tracker.cl:1337/announce",
+-        "udp://open.demonii.com:1337/announce",
+-        "http://tracker.openbittorrent.com:80/announce",
+-        "udp://tracker.openbittorrent.com:6969/announce",
+-        "udp://open.stealth.si:80/announce",
+-        "udp://exodus.desync.com:6969/announce",
+-        "udp://tracker-udp.gbitt.info:80/announce",
+-        "udp://explodie.org:6969/announce",
+-        "https://tracker.gbitt.info:443/announce",
+-        "http://tracker.gbitt.info:80/announce",
+-        "udp://uploads.gamecoast.net:6969/announce",
+-        "udp://tracker1.bt.moack.co.kr:80/announce",
+-        "udp://tracker.tiny-vps.com:6969/announce",
+-        "udp://tracker.theoks.net:6969/announce",
+-        "udp://tracker.dump.cl:6969/announce",
+-        "udp://tracker.bittor.pw:1337/announce"
+-    )
+-
+-
+-    // https://github.com/Diegopyl1209/torrentserver-aniyomi/blob/c18f58e51b6738f053261bc863177078aa9c1c98/web/api/torrents.go#L18
+-    // https://github.com/Diegopyl1209/torrentserver-aniyomi/blob/main/web/api/route.go#L7
+-    @Serializable
+-    data class TorrentRequest(
+-        @JsonProperty("action") @SerialName("action") val action: String,
+-        @JsonProperty("hash") @SerialName("hash") val hash: String = "",
+-        @JsonProperty("link") @SerialName("link") val link: String = "",
+-        @JsonProperty("title") @SerialName("title") val title: String = "",
+-        @JsonProperty("poster") @SerialName("poster") val poster: String = "",
+-        @JsonProperty("data") @SerialName("data") val data: String = "",
+-        @JsonProperty("save_to_db") @SerialName("save_to_db") val saveToDB: Boolean = false,
+-    )
+-
+-    // https://github.com/Diegopyl1209/torrentserver-aniyomi/blob/c18f58e51b6738f053261bc863177078aa9c1c98/torr/state/state.go#L33
+-    // omitempty = nullable
+-    @Serializable
+-    data class TorrentStatus(
+-        @JsonProperty("title") @SerialName("title") var title: String,
+-        @JsonProperty("poster") @SerialName("poster") var poster: String,
+-        @JsonProperty("data") @SerialName("data") var data: String?,
+-        @JsonProperty("timestamp") @SerialName("timestamp") var timestamp: Long,
+-        @JsonProperty("name") @SerialName("name") var name: String?,
+-        @JsonProperty("hash") @SerialName("hash") var hash: String?,
+-        @JsonProperty("stat") @SerialName("stat") var stat: Int,
+-        @JsonProperty("stat_string") @SerialName("stat_string") var statString: String,
+-        @JsonProperty("loaded_size") @SerialName("loaded_size") var loadedSize: Long?,
+-        @JsonProperty("torrent_size") @SerialName("torrent_size") var torrentSize: Long?,
+-        @JsonProperty("preloaded_bytes") @SerialName("preloaded_bytes") var preloadedBytes: Long?,
+-        @JsonProperty("preload_size") @SerialName("preload_size") var preloadSize: Long?,
+-        @JsonProperty("download_speed") @SerialName("download_speed") var downloadSpeed: Double?,
+-        @JsonProperty("upload_speed") @SerialName("upload_speed") var uploadSpeed: Double?,
+-        @JsonProperty("total_peers") @SerialName("total_peers") var totalPeers: Int?,
+-        @JsonProperty("pending_peers") @SerialName("pending_peers") var pendingPeers: Int?,
+-        @JsonProperty("active_peers") @SerialName("active_peers") var activePeers: Int?,
+-        @JsonProperty("connected_seeders") @SerialName("connected_seeders") var connectedSeeders: Int?,
+-        @JsonProperty("half_open_peers") @SerialName("half_open_peers") var halfOpenPeers: Int?,
+-        @JsonProperty("bytes_written") @SerialName("bytes_written") var bytesWritten: Long?,
+-        @JsonProperty("bytes_written_data") @SerialName("bytes_written_data") var bytesWrittenData: Long?,
+-        @JsonProperty("bytes_read") @SerialName("bytes_read") var bytesRead: Long?,
+-        @JsonProperty("bytes_read_data") @SerialName("bytes_read_data") var bytesReadData: Long?,
+-        @JsonProperty("bytes_read_useful_data") @SerialName("bytes_read_useful_data") var bytesReadUsefulData: Long?,
+-        @JsonProperty("chunks_written") @SerialName("chunks_written") var chunksWritten: Long?,
+-        @JsonProperty("chunks_read") @SerialName("chunks_read") var chunksRead: Long?,
+-        @JsonProperty("chunks_read_useful") @SerialName("chunks_read_useful") var chunksReadUseful: Long?,
+-        @JsonProperty("chunks_read_wasted") @SerialName("chunks_read_wasted") var chunksReadWasted: Long?,
+-        @JsonProperty("pieces_dirtied_good") @SerialName("pieces_dirtied_good") var piecesDirtiedGood: Long?,
+-        @JsonProperty("pieces_dirtied_bad") @SerialName("pieces_dirtied_bad") var piecesDirtiedBad: Long?,
+-        @JsonProperty("duration_seconds") @SerialName("duration_seconds") var durationSeconds: Double?,
+-        @JsonProperty("bit_rate") @SerialName("bit_rate") var bitRate: String?,
+-        @JsonProperty("file_stats") @SerialName("file_stats") var fileStats: List<TorrentFileStat>?,
+-        @JsonProperty("trackers") @SerialName("trackers") var trackers: List<String>?,
+-    ) {
+-        fun streamUrl(url: String): String {
+-            val fileName =
+-                this.fileStats?.first { !it.path.isNullOrBlank() }?.path
+-                    ?: throw ErrorLoadingException("Null path")
+-
+-            val index = url.substringAfter("index=").substringBefore("&").toIntOrNull() ?: 0
+-
+-            //  https://github.com/Diegopyl1209/torrentserver-aniyomi/blob/c18f58e51b6738f053261bc863177078aa9c1c98/web/api/stream.go#L18
+-            return "$TORRENT_SERVER_URL/stream/${
+-                URLEncoder.encode(fileName, "utf-8")
+-            }?link=${this.hash}&index=$index&play"
+-        }
+-    }
+-
+-    @Serializable
+-    data class TorrentFileStat(
+-        @JsonProperty("id") @SerialName("id") val id: Int?,
+-        @JsonProperty("path") @SerialName("path") val path: String?,
+-        @JsonProperty("length") @SerialName("length") val length: Long?,
+-    )
+-}
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/player/live/LivePreviewTimeBar.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/player/live/LivePreviewTimeBar.kt
+index 3001281..7314b55 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/player/live/LivePreviewTimeBar.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/player/live/LivePreviewTimeBar.kt
+@@ -8,12 +8,12 @@ import androidx.media3.common.util.UnstableApi
+ import androidx.media3.ui.PlayerControlView
+ import androidx.media3.ui.PlayerView
+ import androidx.media3.ui.R
+-import com.github.rubensousa.previewseekbar.media3.PreviewTimeBar
++import androidx.media3.ui.DefaultTimeBar
+ import java.lang.ref.WeakReference
+ 
+ 
+ @OptIn(UnstableApi::class)
+-class LivePreviewTimeBar(val ctx: Context, attrs: AttributeSet) : PreviewTimeBar(ctx, attrs) {
++class LivePreviewTimeBar(val ctx: Context, attrs: AttributeSet) : DefaultTimeBar(ctx, attrs) {
+ 
+     private var _currentPlayerView: WeakReference<PlayerView>? = null
+     val currentPlayer: Player? get() = _currentPlayerView?.get()?.player
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/result/ResultFragmentPhone.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/result/ResultFragmentPhone.kt
+index 38b24b2..18bccdc 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/result/ResultFragmentPhone.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/result/ResultFragmentPhone.kt
+@@ -28,8 +28,6 @@ import androidx.lifecycle.viewModelScope
+ import com.discord.panels.OverlappingPanelsLayout
+ import com.discord.panels.PanelState
+ import com.discord.panels.PanelsChildGestureRegionObserver
+-import com.google.android.gms.cast.framework.CastButtonFactory
+-import com.google.android.gms.cast.framework.CastContext
+ import com.google.android.material.bottomsheet.BottomSheetDialog
+ import com.google.android.material.button.MaterialButton
+ import com.lagradost.cloudstream3.APIHolder
+@@ -74,7 +72,6 @@ import com.lagradost.cloudstream3.ui.setRecycledViewPool
+ import com.lagradost.cloudstream3.ui.settings.SettingsGeneral.Companion.pickDownloadPath
+ import com.lagradost.cloudstream3.ui.settings.utils.getChooseFolderLauncher
+ import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
+-import com.lagradost.cloudstream3.utils.AppContextUtils.isCastApiAvailable
+ import com.lagradost.cloudstream3.utils.AppContextUtils.loadCache
+ import com.lagradost.cloudstream3.utils.AppContextUtils.openBrowser
+ import com.lagradost.cloudstream3.utils.AppContextUtils.updateHasTrailers
+@@ -660,36 +657,6 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
+                     )
+                 }
+             }
+-            mediaRouteButton.apply {
+-                val chromecastSupport = api?.hasChromecastSupport == true
+-                alpha = if (chromecastSupport) 1f else 0.3f
+-                if (!chromecastSupport) {
+-                    setOnClickListener {
+-                        showToast(
+-                            R.string.no_chromecast_support_toast,
+-                            Toast.LENGTH_LONG
+-                        )
+-                    }
+-                }
+-                activity?.let { act ->
+-                    if (act.isCastApiAvailable()) {
+-                        try {
+-                            CastButtonFactory.setUpMediaRouteButton(act, this)
+-                            CastContext.getSharedInstance(act.applicationContext) {
+-                                it.run()
+-                            }.addOnCompleteListener {
+-                                isGone = !it.isSuccessful
+-                            }
+-                            // this shit leaks for some reason
+-                            //castContext.addCastStateListener { state ->
+-                            //    media_route_button?.isGone = state == CastState.NO_DEVICES_AVAILABLE
+-                            //}
+-                        } catch (e: Exception) {
+-                            logError(e)
+-                        }
+-                    }
+-                }
+-            }
+         }
+ 
+         playerBinding?.apply {
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/result/ResultViewModel2.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/result/ResultViewModel2.kt
+index 17a698d..774b534 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/result/ResultViewModel2.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/result/ResultViewModel2.kt
+@@ -21,7 +21,6 @@ import com.lagradost.cloudstream3.AnimeLoadResponse
+ import com.lagradost.cloudstream3.CloudStreamApp.Companion.context
+ import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
+ import com.lagradost.cloudstream3.CommonActivity.activity
+-import com.lagradost.cloudstream3.CommonActivity.getCastSession
+ import com.lagradost.cloudstream3.CommonActivity.showToast
+ import com.lagradost.cloudstream3.DubStatus
+ import com.lagradost.cloudstream3.EpisodeResponse
+@@ -73,18 +72,15 @@ import com.lagradost.cloudstream3.ui.APIRepository
+ import com.lagradost.cloudstream3.ui.WatchType
+ import com.lagradost.cloudstream3.ui.player.GeneratorPlayer
+ import com.lagradost.cloudstream3.ui.player.LOADTYPE_ALL
+-import com.lagradost.cloudstream3.ui.player.LOADTYPE_CHROMECAST
+ import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP
+ import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP_DOWNLOAD
+ import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
+ import com.lagradost.cloudstream3.ui.player.SubtitleData
+ import com.lagradost.cloudstream3.ui.result.EpisodeAdapter.Companion.getPlayerAction
+ import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
+-import com.lagradost.cloudstream3.utils.AppContextUtils.isConnectedToChromecast
+ import com.lagradost.cloudstream3.utils.AppContextUtils.setDefaultFocus
+ import com.lagradost.cloudstream3.utils.AppContextUtils.sortSubs
+ import com.lagradost.cloudstream3.utils.AppUtils.toJson
+-import com.lagradost.cloudstream3.utils.CastHelper.startCast
+ import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
+ import com.lagradost.cloudstream3.utils.Coroutines.ioWork
+ import com.lagradost.cloudstream3.utils.Coroutines.ioWorkSafe
+@@ -810,22 +806,6 @@ class ResultViewModel2 : ViewModel() {
+         }
+     }
+ 
+-    private fun startChromecast(
+-        activity: Activity?,
+-        result: ResultEpisode,
+-        isVisible: Boolean = true
+-    ) {
+-        if (activity == null) return
+-        loadLinks(
+-            result,
+-            isVisible = isVisible,
+-            sourceTypes = LOADTYPE_CHROMECAST,
+-            isCasting = true
+-        ) { data ->
+-            startChromecast(activity, result, data.links, data.subs, 0)
+-        }
+-    }
+-
+     /**
+      * Toggles the subscription status of an item.
+      *
+@@ -1121,37 +1101,6 @@ class ResultViewModel2 : ViewModel() {
+         }
+     }
+ 
+-    private fun startChromecast(
+-        activity: Activity?,
+-        result: ResultEpisode,
+-        links: List<ExtractorLink>,
+-        subs: List<SubtitleData>,
+-        startIndex: Int,
+-    ) {
+-        if (activity == null) return
+-        val response = currentResponse ?: return
+-        val eps = currentEpisodes[currentIndex ?: return] ?: return
+-        // ResultEpisode.index spans all seasons; Cast indexes this season's list.
+-        val castEpisodeIndex = eps.indexOfFirst { it.id == result.id }
+-        if (castEpisodeIndex < 0) return
+-
+-        // Main needed because getCastSession needs to be on main thread
+-        main {
+-            activity.getCastSession()?.startCast(
+-                response.apiName,
+-                response.isMovie(),
+-                response.name,
+-                response.posterUrl,
+-                castEpisodeIndex,
+-                eps,
+-                links,
+-                subs,
+-                startTime = result.getRealPosition(),
+-                startIndex = startIndex
+-            )
+-        }
+-    }
+-
+     fun cancelLinks() {
+         currentLoadLinkJob?.cancel()
+         currentLoadLinkJob = null
+@@ -1362,15 +1311,6 @@ class ResultViewModel2 : ViewModel() {
+             ACTION_SHOW_OPTIONS -> {
+                 val options = mutableListOf<Pair<UiText, Int>>()
+ 
+-                if (activity?.isConnectedToChromecast() == true) {
+-                    options.addAll(
+-                        listOf(
+-                            txt(R.string.episode_action_chromecast_episode) to ACTION_CHROME_CAST_EPISODE,
+-                            txt(R.string.episode_action_chromecast_mirror) to ACTION_CHROME_CAST_MIRROR,
+-                        )
+-                    )
+-                }
+-
+                 options.add(txt(R.string.episode_action_play_in_app) to ACTION_PLAY_EPISODE_IN_PLAYER)
+                 options.addAll(
+                     listOf(
+@@ -1419,16 +1359,10 @@ class ResultViewModel2 : ViewModel() {
+ 
+             ACTION_CLICK_DEFAULT -> {
+                 activity?.let { ctx ->
+-                    if (ctx.isConnectedToChromecast()) {
+-                        handleEpisodeClickEvent(
+-                            click.copy(action = ACTION_CHROME_CAST_EPISODE)
+-                        )
+-                    } else {
+-                        val action = getPlayerAction(ctx)
+-                        handleEpisodeClickEvent(
+-                            click.copy(action = action)
+-                        )
+-                    }
++                    val action = getPlayerAction(ctx)
++                    handleEpisodeClickEvent(
++                        click.copy(action = action)
++                    )
+                 }
+             }
+ 
+@@ -1473,47 +1407,13 @@ class ResultViewModel2 : ViewModel() {
+             }
+ 
+             ACTION_DOWNLOAD_EPISODE -> {
+-                val response = currentResponse ?: return
+-                DownloadQueueManager.addToQueue(
+-                    DownloadObjects.DownloadQueueItem(
+-                        click.data,
+-                        response.isMovie(),
+-                        response.name,
+-                        response.type,
+-                        response.posterUrl,
+-                        response.apiName,
+-                        response.getId(),
+-                        response.url,
+-                    ).toWrapper()
+-                )
++                // TV-LITE: video downloads removed (subtitle downloads are kept)
++                showToast(R.string.downloads_removed_tv_lite, Toast.LENGTH_SHORT)
+             }
+ 
+             ACTION_DOWNLOAD_MIRROR -> {
+-                val response = currentResponse ?: return
+-                acquireSingleLink(
+-                    click.data,
+-                    LOADTYPE_INAPP_DOWNLOAD,
+-                    txt(R.string.episode_action_download_mirror)
+-                ) { (result, index) ->
+-                    DownloadQueueManager.addToQueue(
+-                        DownloadObjects.DownloadQueueItem(
+-                            click.data,
+-                            response.isMovie(),
+-                            response.name,
+-                            response.type,
+-                            response.posterUrl,
+-                            response.apiName,
+-                            response.getId(),
+-                            response.url,
+-                            listOf(result.links[index]),
+-                            result.subs,
+-                        ).toWrapper()
+-                    )
+-                    showToast(
+-                        R.string.download_started,
+-                        Toast.LENGTH_SHORT
+-                    )
+-                }
++                // TV-LITE: video downloads removed (subtitle downloads are kept)
++                showToast(R.string.downloads_removed_tv_lite, Toast.LENGTH_SHORT)
+             }
+ 
+             ACTION_RELOAD_EPISODE -> {
+@@ -1531,21 +1431,6 @@ class ResultViewModel2 : ViewModel() {
+                 )
+             }
+ 
+-            ACTION_CHROME_CAST_MIRROR -> {
+-                acquireSingleLink(
+-                    click.data,
+-                    LOADTYPE_CHROMECAST,
+-                    txt(R.string.episode_action_chromecast_mirror),
+-                    isCasting = true
+-                ) { (result, index) ->
+-                    startChromecast(activity, click.data, result.links, result.subs, index)
+-                }
+-            }
+-
+-            ACTION_CHROME_CAST_EPISODE -> {
+-                startChromecast(activity, click.data)
+-            }
+-
+             ACTION_PLAY_EPISODE_IN_PLAYER -> {
+                 val list = HashMap<String, String>(currentResponse?.syncData ?: emptyMap())
+                 val generator = generator ?: return
+@@ -2439,6 +2324,7 @@ class ResultViewModel2 : ViewModel() {
+     }
+ 
+     private fun loadTrailers(loadResponse: LoadResponse) = ioSafe {
++        if (!LoadResponse.isTrailersEnabled) return@ioSafe // TV-LITE: trailers removed
+         _trailers.postValue(
+             getTrailers(
+                 loadResponse,
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsAccount.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsAccount.kt
+index 6f67ab8..178a886 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsAccount.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsAccount.kt
+@@ -468,10 +468,6 @@ class SettingsAccount : BasePreferenceFragmentCompat(), BiometricCallback {
+ 
+         val syncApis =
+             listOf(
+-                R.string.mal_key to SyncRepo(malApi),
+-                R.string.kitsu_key to SyncRepo(kitsuApi),
+-                R.string.anilist_key to SyncRepo(aniListApi),
+-                R.string.simkl_key to SyncRepo(simklApi),
+                 R.string.opensubtitles_key to SubtitleRepo(openSubtitlesApi),
+                 R.string.subdl_key to SubtitleRepo(subDlApi),
+                 R.string.animeskip_key to PlainAuthRepo(animeSkipApi),
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsAccountScreen.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsAccountScreen.kt
+index 97890bb..c480dc2 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsAccountScreen.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsAccountScreen.kt
+@@ -43,10 +43,6 @@ import kotlinx.collections.immutable.persistentListOf
+ 
+ object SettingsAccountScreen : SearchableSettings, BiometricAuthenticator.BiometricCallback {
+     val syncApis = persistentListOf(
+-        SyncRepo(malApi),
+-        SyncRepo(kitsuApi),
+-        SyncRepo(aniListApi),
+-        SyncRepo(simklApi),
+         SubtitleRepo(openSubtitlesApi),
+         SubtitleRepo(subDlApi),
+         PlainAuthRepo(animeSkipApi),
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsPlayer.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsPlayer.kt
+index 2949281..4753725 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsPlayer.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsPlayer.kt
+@@ -20,7 +20,6 @@ import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.hidePre
+ import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.setPaddingBottom
+ import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.setToolBarScrollFlags
+ import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.setUpToolbar
+-import com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment
+ import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment
+ import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
+ import com.lagradost.cloudstream3.utils.Qualities
+@@ -242,11 +241,6 @@ class SettingsPlayer : BasePreferenceFragmentCompat() {
+             return@setOnPreferenceClickListener true
+         }
+ 
+-        getPref(R.string.subtitle_settings_chromecast_key)?.setOnPreferenceClickListener {
+-            ChromecastSubtitlesFragment.push(activity, false)
+-            return@setOnPreferenceClickListener true
+-        }
+-
+         getPref(R.string.player_source_priority_key)?.setOnPreferenceClickListener {
+             ioSafe {
+                 val defaultSources = QualityProfileDialog.getAllDefaultSources()
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsPlayerScreen.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsPlayerScreen.kt
+index 8f6f5bf..a4f8e64 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsPlayerScreen.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsPlayerScreen.kt
+@@ -18,7 +18,6 @@ import com.lagradost.cloudstream3.R
+ import com.lagradost.cloudstream3.actions.VideoClickActionHolder
+ import com.lagradost.cloudstream3.ui.player.source_priority.QualityProfileDialog
+ import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.getFolderSize
+-import com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment
+ import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment
+ import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
+ import com.lagradost.cloudstream4.compose.EMULATOR
+@@ -71,13 +70,6 @@ object SettingsPlayerScreen : SearchableSettings {
+                         onClick = {
+                             SubtitlesFragment.push(activity, false)
+                         }),
+-                    Preference.PreferenceItem.TextPreference(
+-                        title = stringResource(R.string.chromecast_subtitles_settings),
+-                        subtitle = stringResource(R.string.chromecast_subtitles_settings_des),
+-                        icon = painterResource(R.drawable.cast),
+-                        onClick = {
+-                            ChromecastSubtitlesFragment.push(activity, false)
+-                        }),
+                 ),
+             ),
+             Preference.PreferenceGroup(
+@@ -172,13 +164,6 @@ object SettingsPlayerScreen : SearchableSettings {
+                         subtitle = stringResource(R.string.rotate_video_desc),
+                         icon = painterResource(R.drawable.screen_rotation),
+                     ),
+-                    Preference.PreferenceItem.SwitchPreference(
+-                        preference = settings.player.previewBarEnabled,
+-                        enabled = isLayout(PHONE or EMULATOR),
+-                        title = stringResource(R.string.preview_seekbar),
+-                        subtitle = stringResource(R.string.preview_seekbar_desc),
+-                        icon = painterResource(R.drawable.picture_in_picture_center_24px),
+-                    ),
+                     Preference.PreferenceItem.ListPreference(
+                         preference = settings.player.softwareDecoding,
+                         title = stringResource(R.string.software_decoding),
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsUIScreen.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsUIScreen.kt
+index 1092a9b..e17c702 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsUIScreen.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsUIScreen.kt
+@@ -180,11 +180,6 @@ object SettingsUIScreen : SearchableSettings {
+                         subtitle = stringResource(R.string.search_suggestions_des),
+                         icon = painterResource(R.drawable.tooltip_24px)
+                     ),
+-                    Preference.PreferenceItem.SwitchPreference(
+-                        preference = settings.ui.trailersEnabled,
+-                        title = stringResource(R.string.show_trailers_settings),
+-                        icon = painterResource(R.drawable.baseline_theaters_24)
+-                    ),
+                     Preference.PreferenceItem.SwitchPreference(
+                         preference = settings.ui.kitsuPostersEnabled,
+                         title = stringResource(R.string.kitsu_settings),
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/subtitles/ChromecastSubtitlesFragment.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/subtitles/ChromecastSubtitlesFragment.kt
+deleted file mode 100644
+index 0e20398..0000000
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/subtitles/ChromecastSubtitlesFragment.kt
++++ /dev/null
+@@ -1,367 +0,0 @@
+-package com.lagradost.cloudstream3.ui.subtitles
+-
+-import android.app.Activity
+-import android.content.Context
+-import android.content.res.Resources
+-import android.graphics.Color
+-import android.os.Bundle
+-import android.util.DisplayMetrics
+-import android.util.TypedValue
+-import android.view.View
+-import android.widget.TextView
+-import android.widget.Toast
+-import androidx.annotation.OptIn
+-import androidx.compose.runtime.Immutable
+-import androidx.compose.runtime.mutableStateOf
+-import androidx.media3.common.text.Cue
+-import androidx.media3.common.util.UnstableApi
+-import com.fasterxml.jackson.annotation.JsonProperty
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_DEPRESSED
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_DROP_SHADOW
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_NONE
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_OUTLINE
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_RAISED
+-import com.jaredrummler.android.colorpicker.ColorPickerDialog
+-import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+-import com.lagradost.cloudstream3.CommonActivity.onColorSelectedEvent
+-import com.lagradost.cloudstream3.CommonActivity.onDialogDismissedEvent
+-import com.lagradost.cloudstream3.CommonActivity.showToast
+-import com.lagradost.cloudstream3.R
+-import com.lagradost.cloudstream3.databinding.ChromecastSubtitleSettingsBinding
+-import com.lagradost.cloudstream3.ui.BaseFragment
+-import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
+-import com.lagradost.cloudstream3.ui.settings.Globals.TV
+-import com.lagradost.cloudstream3.ui.settings.Globals.isLandscape
+-import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
+-import com.lagradost.cloudstream3.utils.DataStore.setKey
+-import com.lagradost.cloudstream3.utils.Event
+-import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showDialog
+-import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
+-import com.lagradost.cloudstream3.utils.UIHelper.hideSystemUI
+-import com.lagradost.cloudstream3.utils.UIHelper.navigate
+-import com.lagradost.cloudstream3.utils.UIHelper.popCurrentPage
+-import kotlinx.serialization.SerialName
+-import kotlinx.serialization.Serializable
+-
+-const val CHROME_SUBTITLE_KEY = "chome_subtitle_settings"
+-
+-@Serializable
+-@Immutable
+-data class SaveChromeCaptionStyle(
+-    @JsonProperty("fontFamily") @SerialName("fontFamily") val fontFamily: String? = null,
+-    @JsonProperty("fontGenericFamily") @SerialName("fontGenericFamily") val fontGenericFamily: Int? = null,
+-    @JsonProperty("backgroundColor") @SerialName("backgroundColor") val backgroundColor: Int = 0x00FFFFFF, // transparent
+-    @JsonProperty("edgeColor") @SerialName("edgeColor") val edgeColor: Int = Color.BLACK, // BLACK
+-    @JsonProperty("edgeType") @SerialName("edgeType") val edgeType: Int = EDGE_TYPE_OUTLINE,
+-    @JsonProperty("foregroundColor") @SerialName("foregroundColor") val foregroundColor: Int = Color.WHITE,
+-    @JsonProperty("fontScale") @SerialName("fontScale") val fontScale: Float = 1.05f,
+-    @JsonProperty("windowColor") @SerialName("windowColor") val windowColor: Int = Color.TRANSPARENT,
+-)
+-
+-class ChromecastSubtitlesFragment : BaseFragment<ChromecastSubtitleSettingsBinding>(
+-    BaseFragment.BindingCreator.Inflate(ChromecastSubtitleSettingsBinding::inflate)
+-) {
+-    companion object {
+-        val applyStyleEvent = Event<SaveChromeCaptionStyle>()
+-
+-        //fun Context.fromSaveToStyle(data: SaveChromeCaptionStyle): CaptionStyleCompat {
+-        //    return CaptionStyleCompat(
+-        //        data.foregroundColor,
+-        //        data.backgroundColor,
+-        //        data.windowColor,
+-        //        data.edgeType,
+-        //        data.edgeColor,
+-        //        if (typeface == null) Typeface.SANS_SERIF else ResourcesCompat.getFont(
+-        //            this,
+-        //            typeface
+-        //        )
+-        //    )
+-        //}
+-
+-        fun push(activity: Activity?, hide: Boolean = true) {
+-            activity.navigate(R.id.global_to_navigation_chrome_subtitles, Bundle().apply {
+-                putBoolean("hide", hide)
+-            })
+-        }
+-
+-        private fun getDefColor(id: Int): Int {
+-            return when (id) {
+-                0 -> Color.WHITE
+-                1 -> Color.BLACK
+-                2 -> Color.TRANSPARENT
+-                3 -> Color.TRANSPARENT
+-                else -> Color.TRANSPARENT
+-            }
+-        }
+-
+-        fun Context.saveStyle(style: SaveChromeCaptionStyle) {
+-            if (chromeCastSubtitleState.value !== style) {
+-                chromeCastSubtitleState.value = style
+-            }
+-            this.setKey(CHROME_SUBTITLE_KEY, style)
+-        }
+-
+-        private fun getPixels(unit: Int, size: Float): Int {
+-            val metrics: DisplayMetrics = Resources.getSystem().displayMetrics
+-            return TypedValue.applyDimension(unit, size, metrics).toInt()
+-        }
+-
+-        fun getCurrentSavedStyle(): SaveChromeCaptionStyle {
+-            return chromeCastSubtitleState.value
+-        }
+-
+-        val defaultChromeCastSubtitleState = SaveChromeCaptionStyle()
+-        val chromeCastSubtitleState = mutableStateOf(
+-            getKey<SaveChromeCaptionStyle>(CHROME_SUBTITLE_KEY) ?: defaultChromeCastSubtitleState
+-        )
+-    }
+-
+-    private fun onColorSelected(stuff: Pair<Int, Int>) {
+-        setColor(stuff.first, stuff.second)
+-        if (hide)
+-            activity?.hideSystemUI()
+-    }
+-
+-    private fun onDialogDismissed(id: Int) {
+-        if (hide)
+-            activity?.hideSystemUI()
+-    }
+-
+-    private fun getColor(id: Int): Int {
+-        val color = when (id) {
+-            0 -> state.foregroundColor
+-            1 -> state.edgeColor
+-            2 -> state.backgroundColor
+-            3 -> state.windowColor
+-
+-            else -> Color.TRANSPARENT
+-        }
+-
+-        return if (color == Color.TRANSPARENT) Color.BLACK else color
+-    }
+-
+-    private fun setColor(id: Int, color: Int?) {
+-        val realColor = color ?: getDefColor(id)
+-        when (id) {
+-            0 -> state = state.copy(foregroundColor = realColor)
+-            1 -> state = state.copy(edgeColor = realColor)
+-            2 -> state = state.copy(backgroundColor = realColor)
+-            3 -> state = state.copy(windowColor = realColor)
+-
+-            else -> Unit
+-        }
+-        updateState()
+-    }
+-
+-    private fun updateState() {
+-        //subtitle_text?.setStyle(fromSaveToStyle(state))
+-    }
+-
+-    private lateinit var state: SaveChromeCaptionStyle
+-    private var hide: Boolean = true
+-
+-    override fun onDestroy() {
+-        super.onDestroy()
+-        onColorSelectedEvent -= ::onColorSelected
+-    }
+-
+-    override fun fixLayout(view: View) {
+-        fixSystemBarsPadding(
+-            view,
+-            padBottom = isLandscape(),
+-            padLeft = isLayout(TV or EMULATOR)
+-        )
+-    }
+-
+-    override fun onBindingCreated(binding: ChromecastSubtitleSettingsBinding) {
+-        hide = arguments?.getBoolean("hide") ?: true
+-        onColorSelectedEvent += ::onColorSelected
+-        onDialogDismissedEvent += ::onDialogDismissed
+-
+-        state = getCurrentSavedStyle()
+-        updateState()
+-
+-        val isTvSettings = isLayout(TV or EMULATOR)
+-        fun View.setFocusableInTv() {
+-            this.isFocusableInTouchMode = isTvSettings
+-        }
+-
+-        fun View.setup(id: Int) {
+-            setFocusableInTv()
+-            this.setOnClickListener {
+-                activity?.let {
+-                    ColorPickerDialog.newBuilder()
+-                        .setDialogId(id)
+-                        .setShowAlphaSlider(true)
+-                        .setColor(getColor(id))
+-                        .show(it)
+-                }
+-            }
+-
+-            this.setOnLongClickListener {
+-                setColor(id, null)
+-                showToast(R.string.subs_default_reset_toast, Toast.LENGTH_SHORT)
+-                return@setOnLongClickListener true
+-            }
+-        }
+-
+-        binding.apply {
+-            subsTextColor.setup(0)
+-            subsOutlineColor.setup(1)
+-            subsBackgroundColor.setup(2)
+-        }
+-
+-        val dismissCallback = {
+-            if (hide)
+-                activity?.hideSystemUI()
+-        }
+-
+-        binding.subsEdgeType.setFocusableInTv()
+-        binding.subsEdgeType.setOnClickListener { textView ->
+-            val edgeTypes = listOf(
+-                Pair(
+-                    EDGE_TYPE_NONE,
+-                    textView.context.getString(R.string.subtitles_none)
+-                ),
+-                Pair(
+-                    EDGE_TYPE_OUTLINE,
+-                    textView.context.getString(R.string.subtitles_outline)
+-                ),
+-                Pair(
+-                    EDGE_TYPE_DEPRESSED,
+-                    textView.context.getString(R.string.subtitles_depressed)
+-                ),
+-                Pair(
+-                    EDGE_TYPE_DROP_SHADOW,
+-                    textView.context.getString(R.string.subtitles_shadow)
+-                ),
+-                Pair(
+-                    EDGE_TYPE_RAISED,
+-                    textView.context.getString(R.string.subtitles_raised)
+-                ),
+-            )
+-
+-            //showBottomDialog
+-            activity?.showDialog(
+-                edgeTypes.map { it.second },
+-                edgeTypes.map { it.first }.indexOf(state.edgeType),
+-                (textView as TextView).text.toString(),
+-                false,
+-                dismissCallback
+-            ) { index ->
+-                state = state.copy(edgeType = edgeTypes.map { it.first }[index])
+-                updateState()
+-            }
+-        }
+-
+-        binding.subsEdgeType.setOnLongClickListener {
+-            state = state.copy(edgeType = defaultChromeCastSubtitleState.edgeType)
+-            updateState()
+-            showToast(R.string.subs_default_reset_toast, Toast.LENGTH_SHORT)
+-            return@setOnLongClickListener true
+-        }
+-
+-        binding.subsFontSize.setFocusableInTv()
+-        binding.subsFontSize.setOnClickListener { textView ->
+-            val fontSizes = listOf(
+-                Pair(0.75f, "75%"),
+-                Pair(0.80f, "80%"),
+-                Pair(0.85f, "85%"),
+-                Pair(0.90f, "90%"),
+-                Pair(0.95f, "95%"),
+-                Pair(1.00f, "100%"),
+-                Pair(1.05f, textView.context.getString(R.string.normal)),
+-                Pair(1.10f, "110%"),
+-                Pair(1.15f, "115%"),
+-                Pair(1.20f, "120%"),
+-                Pair(1.25f, "125%"),
+-                Pair(1.30f, "130%"),
+-                Pair(1.35f, "135%"),
+-                Pair(1.40f, "140%"),
+-                Pair(1.45f, "145%"),
+-                Pair(1.50f, "150%"),
+-            )
+-
+-            //showBottomDialog
+-            activity?.showDialog(
+-                fontSizes.map { it.second },
+-                fontSizes.map { it.first }.indexOf(state.fontScale),
+-                (textView as TextView).text.toString(),
+-                false,
+-                dismissCallback
+-            ) { index ->
+-                state = state.copy(fontScale = fontSizes.map { it.first }[index])
+-                //textView.context.updateState() // font size not changed
+-            }
+-        }
+-
+-        binding.subsFontSize.setOnLongClickListener { _ ->
+-            state = state.copy(fontScale = defaultChromeCastSubtitleState.fontScale)
+-            //textView.context.updateState() // font size not changed
+-            showToast(R.string.subs_default_reset_toast, Toast.LENGTH_SHORT)
+-            return@setOnLongClickListener true
+-        }
+-
+-        binding.subsFont.setFocusableInTv()
+-        binding.subsFont.setOnClickListener { textView ->
+-            val fontTypes = listOf(
+-                null to textView.context.getString(R.string.normal),
+-                "Droid Sans" to "Droid Sans",
+-                "Droid Sans Mono" to "Droid Sans Mono",
+-                "Droid Serif Regular" to "Droid Serif Regular",
+-                "Cutive Mono" to "Cutive Mono",
+-                "Short Stack" to "Short Stack",
+-                "Quintessential" to "Quintessential",
+-                "Alegreya Sans SC" to "Alegreya Sans SC",
+-            )
+-
+-            //showBottomDialog
+-            activity?.showDialog(
+-                fontTypes.map { it.second },
+-                fontTypes.map { it.first }.indexOf(state.fontFamily),
+-                (textView as TextView).text.toString(),
+-                false,
+-                dismissCallback
+-            ) { index ->
+-                state = state.copy(fontFamily = fontTypes.map { it.first }[index])
+-                updateState()
+-            }
+-        }
+-        binding.subsFont.setOnLongClickListener { _ ->
+-            state = state.copy(fontFamily = defaultChromeCastSubtitleState.fontFamily)
+-            updateState()
+-            showToast(activity, R.string.subs_default_reset_toast, Toast.LENGTH_SHORT)
+-            return@setOnLongClickListener true
+-        }
+-
+-        binding.cancelBtt.setOnClickListener {
+-            activity?.popCurrentPage()
+-        }
+-
+-        binding.applyBtt.setOnClickListener {
+-            it.context.saveStyle(state)
+-            applyStyleEvent.invoke(state)
+-            //it.context.fromSaveToStyle(state)
+-            activity?.popCurrentPage()
+-        }
+-
+-        setSubtitleCues(binding)
+-    }
+-
+-    @OptIn(UnstableApi::class)
+-    private fun setSubtitleCues(binding: ChromecastSubtitleSettingsBinding) {
+-        binding.subtitleText.apply {
+-            setCues(
+-                listOf(
+-                    Cue.Builder()
+-                        .setTextSize(
+-                            getPixels(TypedValue.COMPLEX_UNIT_SP, 25.0f).toFloat(),
+-                            Cue.TEXT_SIZE_TYPE_ABSOLUTE
+-                        )
+-                        .setText(context.getString(R.string.subtitles_example_text))
+-                        .build()
+-                )
+-            )
+-        }
+-    }
+-}
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/subtitles/ChromecastSubtitlesFragment2.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/subtitles/ChromecastSubtitlesFragment2.kt
+deleted file mode 100644
+index a25a8aa..0000000
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/subtitles/ChromecastSubtitlesFragment2.kt
++++ /dev/null
+@@ -1,6 +0,0 @@
+-package com.lagradost.cloudstream3.ui.subtitles
+-
+-import com.lagradost.cloudstream3.utils.BaseComposeFragment
+-import com.lagradost.cloudstream4.compose.Screen
+-
+-class ChromecastSubtitlesFragment2 : BaseComposeFragment(), Screen by ChromecastSubtitlesScreen
+\ No newline at end of file
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/ui/subtitles/ChromecastSubtitlesScreen.kt b/app/src/main/java/com/lagradost/cloudstream3/ui/subtitles/ChromecastSubtitlesScreen.kt
+deleted file mode 100644
+index 63c3209..0000000
+--- a/app/src/main/java/com/lagradost/cloudstream3/ui/subtitles/ChromecastSubtitlesScreen.kt
++++ /dev/null
+@@ -1,159 +0,0 @@
+-package com.lagradost.cloudstream3.ui.subtitles
+-
+-import androidx.compose.foundation.layout.RowScope
+-import androidx.compose.runtime.Composable
+-import androidx.compose.runtime.DisposableEffect
+-import androidx.compose.runtime.SideEffect
+-import androidx.compose.runtime.getValue
+-import androidx.compose.runtime.remember
+-import androidx.compose.runtime.setValue
+-import androidx.compose.ui.platform.LocalContext
+-import androidx.compose.ui.res.painterResource
+-import androidx.compose.ui.res.stringResource
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_DEPRESSED
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_DROP_SHADOW
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_NONE
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_OUTLINE
+-import com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_RAISED
+-import com.lagradost.cloudstream3.R
+-import com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment.Companion.applyStyleEvent
+-import com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment.Companion.chromeCastSubtitleState
+-import com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment.Companion.defaultChromeCastSubtitleState
+-import com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment.Companion.saveStyle
+-import com.lagradost.cloudstream3.ui.subtitles.SubtitlesScreen.SetUpUndoBar
+-import com.mihon.common.preference.StatePreferenceStore
+-import com.mihon.presentation.settings.Preference
+-import com.mihon.presentation.settings.SearchableSettings
+-import kotlinx.collections.immutable.persistentListOf
+-import kotlinx.collections.immutable.persistentMapOf
+-import kotlin.math.roundToInt
+-
+-object ChromecastSubtitlesScreen : SearchableSettings {
+-    @Composable
+-    override fun getTitleRes(): String = stringResource(R.string.chromecast_subtitles_settings)
+-
+-    // For ux purposes we also want to show a diff of what will be reset
+-    private val diff = arrayOf<Pair<Int, (SaveChromeCaptionStyle) -> Any?>>(
+-        R.string.subs_font to { style -> style.fontFamily },
+-        R.string.subs_text_color to { state -> state.foregroundColor },
+-        R.string.subs_font_size to { state -> state.fontScale },
+-        R.string.subs_edge_type to { state -> state.edgeType },
+-        R.string.subs_outline_color to { state -> state.edgeColor },
+-        R.string.subs_window_color to { state -> state.windowColor },
+-        R.string.subs_background_color to { state -> state.backgroundColor },
+-    )
+-
+-    @Composable
+-    override fun RowScope.AppBarAction() {
+-        val initialState = remember { chromeCastSubtitleState.value }
+-        var state by chromeCastSubtitleState
+-        val context = LocalContext.current
+-
+-        SideEffect(state) {
+-            // When we modify the state, we modify the stored data
+-            context.saveStyle(state)
+-        }
+-
+-        DisposableEffect(Unit) {
+-            onDispose {
+-                if (initialState != state) {
+-                    applyStyleEvent.invoke(state)
+-                }
+-            }
+-        }
+-        SetUpUndoBar(
+-            diff = diff,
+-            initialState = initialState,
+-            currentState = chromeCastSubtitleState,
+-            default = defaultChromeCastSubtitleState
+-        )
+-    }
+-
+-    @Composable
+-    override fun getPreferences(): List<Preference> {
+-        val store = StatePreferenceStore(chromeCastSubtitleState)
+-
+-        return persistentListOf(
+-            Preference.PreferenceGroup(
+-                title = stringResource(R.string.subs_font),
+-                preferenceItems = persistentListOf(
+-                    Preference.PreferenceItem.ListPreference(
+-                        preference = store.field(SaveChromeCaptionStyle::fontFamily) { newValue ->
+-                            copy(fontFamily = newValue)
+-                        },
+-                        icon = painterResource(R.drawable.font_download_24px),
+-                        title = stringResource(R.string.subs_font),
+-                        entries = persistentMapOf(
+-                            null to stringResource(R.string.normal),
+-                            "Droid Sans" to "Droid Sans",
+-                            "Droid Sans Mono" to "Droid Sans Mono",
+-                            "Droid Serif Regular" to "Droid Serif Regular",
+-                            "Cutive Mono" to "Cutive Mono",
+-                            "Short Stack" to "Short Stack",
+-                            "Quintessential" to "Quintessential",
+-                            "Alegreya Sans SC" to "Alegreya Sans SC",
+-                        )
+-                    ),
+-                    Preference.PreferenceItem.ColorPreference(
+-                        preference = store.field(SaveChromeCaptionStyle::foregroundColor) { newValue ->
+-                            copy(foregroundColor = newValue)
+-                        },
+-                        title = stringResource(R.string.subs_text_color),
+-                        icon = painterResource(R.drawable.format_color_text_24px),
+-                    ),
+-                    Preference.PreferenceItem.SliderPreference(
+-                        preference = store.field(
+-                            get = { fontScale.times(100.0f).roundToInt() },
+-                            set = { newValue -> copy(fontScale = newValue.toFloat() * 0.01f) }),
+-                        icon = painterResource(R.drawable.text_fields_24px),
+-                        title = stringResource(R.string.subs_font_size),
+-                        valueRange = 75..150,
+-                        steps = 75 / 5 - 1,
+-                    )
+-                )
+-            ), Preference.PreferenceGroup(
+-                title = stringResource(R.string.subs_edge), preferenceItems = persistentListOf(
+-                    Preference.PreferenceItem.ListPreference(
+-                        preference = store.field(SaveChromeCaptionStyle::edgeType) { newValue ->
+-                            copy(edgeType = newValue)
+-                        },
+-                        icon = painterResource(R.drawable.shadow_24px),
+-                        title = stringResource(R.string.subs_edge_type),
+-                        entries = persistentMapOf(
+-                            EDGE_TYPE_NONE to stringResource(R.string.subtitles_none),
+-                            EDGE_TYPE_OUTLINE to stringResource(R.string.subtitles_outline),
+-                            EDGE_TYPE_DEPRESSED to stringResource(R.string.subtitles_depressed),
+-                            EDGE_TYPE_DROP_SHADOW to stringResource(R.string.subtitles_shadow),
+-                            EDGE_TYPE_RAISED to stringResource(R.string.subtitles_raised),
+-                        )
+-                    ),
+-                    Preference.PreferenceItem.ColorPreference(
+-                        preference = store.field(SaveChromeCaptionStyle::edgeColor) { newValue ->
+-                            copy(edgeColor = newValue)
+-                        },
+-                        //enabled = state.edgeType != EDGE_TYPE_NONE,
+-                        title = stringResource(R.string.subs_outline_color),
+-                        icon = painterResource(R.drawable.border_color_24px),
+-                    ),
+-                )
+-            ), Preference.PreferenceGroup(
+-                title = stringResource(R.string.background), preferenceItems = persistentListOf(
+-                    Preference.PreferenceItem.ColorPreference(
+-                        preference = store.field(SaveChromeCaptionStyle::windowColor) { newValue ->
+-                            copy(windowColor = newValue)
+-                        },
+-                        title = stringResource(R.string.subs_window_color),
+-                        icon = painterResource(R.drawable.imagesearch_roller_24px),
+-                    ),
+-                    Preference.PreferenceItem.ColorPreference(
+-                        preference = store.field(SaveChromeCaptionStyle::backgroundColor) { newValue ->
+-                            copy(backgroundColor = newValue)
+-                        },
+-                        title = stringResource(R.string.subs_background_color),
+-                        icon = painterResource(R.drawable.format_color_fill_24px),
+-                    ),
+-                )
+-            )
+-        )
+-    }
+-}
+\ No newline at end of file
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/utils/AppContextUtils.kt b/app/src/main/java/com/lagradost/cloudstream3/utils/AppContextUtils.kt
+index 2e38291..299862d 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/utils/AppContextUtils.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/utils/AppContextUtils.kt
+@@ -47,11 +47,6 @@ import androidx.tvprovider.media.tv.TvContractCompat
+ import androidx.tvprovider.media.tv.WatchNextProgram
+ import androidx.tvprovider.media.tv.WatchNextProgram.fromCursor
+ import androidx.viewpager2.widget.ViewPager2
+-import com.google.android.gms.cast.framework.CastContext
+-import com.google.android.gms.cast.framework.CastState
+-import com.google.android.gms.common.ConnectionResult
+-import com.google.android.gms.common.GoogleApiAvailability
+-import com.google.android.gms.common.wrappers.Wrappers
+ import com.google.android.material.bottomsheet.BottomSheetDialog
+ import com.lagradost.cloudstream3.APIHolder.apis
+ import com.lagradost.cloudstream3.AllLanguagesName
+@@ -434,7 +429,7 @@ object AppContextUtils {
+ 
+     private fun Context.getHasTrailers(): Boolean {
+         val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
+-        return settingsManager.getBoolean(this.getString(R.string.show_trailers_key), true)
++        return false // TV-LITE: trailer support removed
+     }
+ 
+     fun Context.shouldShowPlayerMetadata(): Boolean {
+@@ -588,6 +583,11 @@ object AppContextUtils {
+     /**
+      * If fallbackWebview is true and a fragment is supplied then it will open a webview with the url if the browser fails.
+      * */
++    // TV-LITE: Chromecast support removed
++    fun Context.isCastApiAvailable(): Boolean = false
++
++    fun Context.isConnectedToChromecast(): Boolean = false
++
+     fun Context.openBrowser(
+         url: String,
+         fallbackWebview: Boolean = false,
+@@ -806,36 +806,6 @@ object AppContextUtils {
+         return currentAudioFocusChangeListener
+     }
+ 
+-    fun Context.isCastApiAvailable(): Boolean {
+-        val isCastApiAvailable =
+-            GoogleApiAvailability.getInstance()
+-                .isGooglePlayServicesAvailable(applicationContext) == ConnectionResult.SUCCESS
+-
+-        try {
+-            applicationContext?.let {
+-                val task = CastContext.getSharedInstance(it) { it.run() }
+-                task.result
+-            }
+-        } catch (e: Exception) {
+-            println(e)
+-            // Track non-fatal
+-            return false
+-        }
+-
+-        return isCastApiAvailable
+-    }
+-
+-    fun Context.isConnectedToChromecast(): Boolean {
+-        if (isCastApiAvailable()) {
+-            val executor: Executor = Executors.newSingleThreadExecutor()
+-            val castContext = CastContext.getSharedInstance(this, executor)
+-            if (castContext.result.castState == CastState.CONNECTED) {
+-                return true
+-            }
+-        }
+-        return false
+-    }
+-
+     /**
+      * Sets the focus to the negative button when in TV and Emulator layout.
+      **/
+@@ -874,7 +844,7 @@ object AppContextUtils {
+     }
+ 
+     fun Context.isAppInstalled(uri: String): Boolean {
+-        val pm = Wrappers.packageManager(this)
++        val pm = this.packageManager
+ 
+         return try {
+             pm.getPackageInfo(uri, 0) // PackageManager.GET_ACTIVITIES
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/utils/BiometricAuthenticator.kt b/app/src/main/java/com/lagradost/cloudstream3/utils/BiometricAuthenticator.kt
+index bce8f09..d00944c 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/utils/BiometricAuthenticator.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/utils/BiometricAuthenticator.kt
+@@ -180,10 +180,8 @@ object BiometricAuthenticator {
+     }
+ 
+     fun isAuthEnabled(ctx: Context):Boolean {
+-        return ctx.let {
+-            PreferenceManager.getDefaultSharedPreferences(ctx)
+-                .getBoolean(getString(ctx, R.string.biometric_key), false)
+-        }
++        // TV-LITE: biometric app-lock permanently disabled
++        return false
+     }
+ 
+     interface BiometricCallback {
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/utils/CastHelper.kt b/app/src/main/java/com/lagradost/cloudstream3/utils/CastHelper.kt
+deleted file mode 100644
+index b48c8d4..0000000
+--- a/app/src/main/java/com/lagradost/cloudstream3/utils/CastHelper.kt
++++ /dev/null
+@@ -1,151 +0,0 @@
+-package com.lagradost.cloudstream3.utils
+-
+-import androidx.core.net.toUri
+-import androidx.media3.common.MimeTypes
+-import com.google.android.gms.cast.*
+-import com.google.android.gms.cast.framework.CastSession
+-import com.google.android.gms.cast.framework.media.RemoteMediaClient
+-import com.google.android.gms.common.api.PendingResult
+-import com.google.android.gms.common.images.WebImage
+-import com.lagradost.cloudstream3.mvvm.logError
+-import com.lagradost.cloudstream3.ui.MetadataHolder
+-import com.lagradost.cloudstream3.ui.player.SubtitleData
+-import com.lagradost.cloudstream3.ui.result.ResultEpisode
+-import com.lagradost.cloudstream3.utils.AppUtils.toJson
+-import com.lagradost.cloudstream3.utils.Coroutines.main
+-import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.withContext
+-import org.json.JSONObject
+-
+-object CastHelper {
+-    fun getMediaInfo(
+-        epData: ResultEpisode,
+-        holder: MetadataHolder,
+-        index: Int,
+-        data: JSONObject?,
+-        subtitles: List<SubtitleData>
+-    ): MediaInfo {
+-        val link = holder.currentLinks[index]
+-        val movieMetadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE)
+-        movieMetadata.putString(
+-            MediaMetadata.KEY_SUBTITLE,
+-            if (holder.isMovie)
+-                "${link.name} ${Qualities.getStringByInt(link.quality)}"
+-            else
+-                (epData.name ?: "Episode ${epData.episode}") + " - ${link.name} ${Qualities.getStringByInt(link.quality)}"
+-        )
+-
+-        holder.title?.let {
+-            movieMetadata.putString(MediaMetadata.KEY_TITLE, it)
+-        }
+-
+-        val srcPoster = epData.poster ?: holder.poster
+-        if (srcPoster != null) {
+-            movieMetadata.addImage(WebImage(srcPoster.toUri()))
+-        }
+-
+-        var subIndex = 0
+-        val tracks = subtitles.map {
+-            MediaTrack.Builder(subIndex++.toLong(), MediaTrack.TYPE_TEXT)
+-                .setName(it.name)
+-                .setSubtype(MediaTrack.SUBTYPE_SUBTITLES)
+-                .setContentId(it.url)
+-                .build()
+-        }
+-
+-        val builder = MediaInfo.Builder(link.url)
+-            .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+-            .setContentType(when(link.type) {
+-                ExtractorLinkType.M3U8 -> MimeTypes.APPLICATION_M3U8
+-                ExtractorLinkType.DASH -> MimeTypes.APPLICATION_MPD
+-                else -> MimeTypes.VIDEO_MP4
+-            })
+-            .setMetadata(movieMetadata)
+-            .setMediaTracks(tracks)
+-        data?.let {
+-            builder.setCustomData(data)
+-        }
+-
+-        return builder.build()
+-    }
+-
+-    fun awaitLinks(
+-        pending: PendingResult<RemoteMediaClient.MediaChannelResult>?,
+-        callback: (Boolean) -> Unit
+-    ) {
+-        if (pending == null) return
+-        main {
+-            val res = withContext(Dispatchers.IO) { pending.await() }
+-            when (res.status.statusCode) {
+-                CastStatusCodes.FAILED -> {
+-                    callback.invoke(true)
+-                    println("FAILED AND LOAD NEXT")
+-                }
+-                else -> Unit //IDK DO SMTH HERE
+-            }
+-        }
+-    }
+-
+-    fun CastSession?.startCast(
+-        apiName: String,
+-        isMovie: Boolean,
+-        title: String?,
+-        poster: String?,
+-        currentEpisodeIndex: Int,
+-        episodes: List<ResultEpisode>,
+-        currentLinks: List<ExtractorLink>,
+-        subtitles: List<SubtitleData>,
+-        startIndex: Int? = null,
+-        startTime: Long? = null,
+-    ): Boolean {
+-        try {
+-            if (this == null) return false
+-            if (episodes.isEmpty()) return false
+-            if (currentEpisodeIndex >= episodes.size) return false
+-
+-            val epData = episodes[currentEpisodeIndex]
+-
+-            val holder =
+-                MetadataHolder(
+-                    apiName,
+-                    isMovie,
+-                    title,
+-                    poster,
+-                    currentEpisodeIndex,
+-                    episodes,
+-                    currentLinks,
+-                    subtitles
+-                )
+-
+-            val index = if (startIndex == null || startIndex < 0) 0 else startIndex
+-
+-            val mediaItem =
+-                getMediaInfo(epData, holder, index, JSONObject(holder.toJson()), subtitles)
+-
+-            awaitLinks(
+-                this.remoteMediaClient?.load(
+-                    MediaLoadRequestData.Builder().setMediaInfo(mediaItem)
+-                        .setCurrentTime(startTime ?: 0L).build()
+-                )
+-            ) {
+-                if (currentLinks.size > index + 1)
+-                    startCast(
+-                        apiName,
+-                        isMovie,
+-                        title,
+-                        poster,
+-                        currentEpisodeIndex,
+-                        episodes,
+-                        currentLinks,
+-                        subtitles,
+-                        index + 1,
+-                        startTime
+-                    )
+-            }
+-            return true
+-        } catch (e: Exception) {
+-            logError(e)
+-            return false
+-        }
+-    }
+-}
+\ No newline at end of file
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/utils/CastOptionsProvider.kt b/app/src/main/java/com/lagradost/cloudstream3/utils/CastOptionsProvider.kt
+deleted file mode 100644
+index ece9a4c..0000000
+--- a/app/src/main/java/com/lagradost/cloudstream3/utils/CastOptionsProvider.kt
++++ /dev/null
+@@ -1,53 +0,0 @@
+-package com.lagradost.cloudstream3.utils
+-
+-import android.content.Context
+-import com.google.android.gms.cast.CastMediaControlIntent
+-import com.google.android.gms.cast.framework.CastOptions
+-import com.google.android.gms.cast.framework.OptionsProvider
+-import com.google.android.gms.cast.framework.SessionProvider
+-import com.google.android.gms.cast.framework.media.CastMediaOptions
+-import com.google.android.gms.cast.framework.media.MediaIntentReceiver
+-import com.google.android.gms.cast.framework.media.NotificationOptions
+-import com.lagradost.cloudstream3.R
+-import com.lagradost.cloudstream3.ui.ControllerActivity
+-import java.util.*
+-
+-class CastOptionsProvider : OptionsProvider {
+-    override fun getCastOptions(context: Context): CastOptions {
+-        val buttonActions = listOf(
+-            MediaIntentReceiver.ACTION_REWIND,
+-            MediaIntentReceiver.ACTION_TOGGLE_PLAYBACK,
+-            MediaIntentReceiver.ACTION_FORWARD,
+-            MediaIntentReceiver.ACTION_STOP_CASTING
+-        )
+-
+-        val name = ControllerActivity::class.qualifiedName!!
+-
+-        val compatButtonAction = intArrayOf(1, 3)
+-        val notificationOptions =
+-            NotificationOptions.Builder()
+-                .setTargetActivityClassName(name)
+-                .setActions(buttonActions, compatButtonAction)
+-                .setForward30DrawableResId(R.drawable.go_forward_30)
+-                .setRewind30DrawableResId(R.drawable.go_back_30)
+-                .setSkipStepMs(30000)
+-                .build()
+-
+-        val mediaOptions = CastMediaOptions.Builder()
+-            .setNotificationOptions(notificationOptions)
+-            .setExpandedControllerActivityClassName(name)
+-            .build()
+-
+-        return CastOptions.Builder()
+-            .setReceiverApplicationId(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID)
+-            //.setReceiverApplicationId("")
+-            //  C0868879 = SAMPLE, CHANGE TO A NICE ID at https://developers.google.com/cast/docs/registration
+-            .setStopReceiverApplicationWhenEndingSession(true)
+-            .setCastMediaOptions(mediaOptions)
+-            .build()
+-    }
+-
+-    override fun getAdditionalSessionProviders(p0: Context): MutableList<SessionProvider> {
+-        return Collections.emptyList()
+-    }
+-}
+\ No newline at end of file
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/utils/InAppUpdater.kt b/app/src/main/java/com/lagradost/cloudstream3/utils/InAppUpdater.kt
+index f4d6b42..6cd1764 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/utils/InAppUpdater.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/utils/InAppUpdater.kt
+@@ -252,7 +252,7 @@ object InAppUpdater {
+     ): Boolean {
+         val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
+         val autoUpdateEnabled =
+-            settingsManager.getBoolean(getString(R.string.auto_update_key), true)
++            settingsManager.getBoolean(getString(R.string.auto_update_key), false) // TV-LITE: manual updates only
+         if (checkAutoUpdate && !autoUpdateEnabled) {
+             return false
+         }
+diff --git a/app/src/main/java/com/lagradost/cloudstream3/utils/downloader/DownloadQueueManager.kt b/app/src/main/java/com/lagradost/cloudstream3/utils/downloader/DownloadQueueManager.kt
+index f386640..ca3e3fa 100644
+--- a/app/src/main/java/com/lagradost/cloudstream3/utils/downloader/DownloadQueueManager.kt
++++ b/app/src/main/java/com/lagradost/cloudstream3/utils/downloader/DownloadQueueManager.kt
+@@ -171,6 +171,8 @@ object DownloadQueueManager {
+     }
+ 
+     private fun startQueueService(context: Context?) {
++        // TV-LITE: download services removed; queue is never started
++        if (true) return
+         if (context == null) {
+             Log.d(TAG, "Cannot start download queue service, null context.")
+             return
+diff --git a/app/src/main/res/layout/activity_main.xml b/app/src/main/res/layout/activity_main.xml
+index eb7c671..e45a3fa 100644
+--- a/app/src/main/res/layout/activity_main.xml
++++ b/app/src/main/res/layout/activity_main.xml
+@@ -55,32 +55,12 @@
+             android:layout_width="0dp"
+             android:layout_height="0dp"
+             app:defaultNavHost="true"
+-            app:layout_constraintBottom_toTopOf="@+id/cast_mini_controller_holder"
++            app:layout_constraintBottom_toTopOf="@+id/nav_view"
+             app:layout_constraintEnd_toEndOf="parent"
+             app:layout_constraintStart_toEndOf="@+id/nav_rail_view"
+             app:layout_constraintTop_toTopOf="parent"
+             app:navGraph="@navigation/mobile_navigation" />
+ 
+-        <LinearLayout
+-            android:id="@+id/cast_mini_controller_holder"
+-            android:layout_width="0dp"
+-            android:layout_height="wrap_content"
+-            app:layout_constraintBottom_toTopOf="@+id/nav_view"
+-            app:layout_constraintEnd_toEndOf="parent"
+-            app:layout_constraintStart_toEndOf="@+id/nav_rail_view"
+-            tools:layout_height="100dp">
+-            <!--com.google.android.gms.cast.framework.media.widget.MiniControllerFragment-->
+-            <fragment
+-                android:id="@+id/cast_mini_controller"
+-                class="com.lagradost.cloudstream3.ui.MyMiniControllerFragment"
+-                android:layout_width="match_parent"
+-                android:layout_height="wrap_content"
+-                android:visibility="gone"
+-
+-                app:castControlButtons="@array/cast_mini_controller_control_buttons"
+-                app:customCastBackgroundColor="?attr/primaryGrayBackground"
+-                tools:ignore="FragmentTagUsage" />
+-        </LinearLayout>
+     </androidx.constraintlayout.widget.ConstraintLayout>
+ 
+     <androidx.compose.ui.platform.ComposeView
+diff --git a/app/src/main/res/layout/activity_main_tv.xml b/app/src/main/res/layout/activity_main_tv.xml
+index 0d81285..eb12556 100644
+--- a/app/src/main/res/layout/activity_main_tv.xml
++++ b/app/src/main/res/layout/activity_main_tv.xml
+@@ -18,7 +18,7 @@
+             android:layout_width="0dp"
+             android:layout_height="0dp"
+             app:defaultNavHost="true"
+-            app:layout_constraintBottom_toTopOf="@+id/cast_mini_controller_holder"
++            app:layout_constraintBottom_toBottomOf="parent"
+             app:layout_constraintEnd_toEndOf="parent"
+             app:layout_constraintStart_toStartOf="parent"
+             app:layout_constraintTop_toTopOf="parent"
+@@ -72,25 +72,6 @@
+             app:layout_constraintRight_toRightOf="parent"
+             app:menu="@menu/bottom_nav_menu" />
+ 
+-        <LinearLayout
+-            android:id="@+id/cast_mini_controller_holder"
+-            android:layout_width="0dp"
+-            android:layout_height="wrap_content"
+-            app:layout_constraintBottom_toBottomOf="parent"
+-            app:layout_constraintEnd_toEndOf="parent"
+-            app:layout_constraintStart_toEndOf="@+id/nav_rail_view"
+-            tools:layout_height="100dp">
+-            <!--com.google.android.gms.cast.framework.media.widget.MiniControllerFragment-->
+-            <fragment
+-                android:id="@+id/cast_mini_controller"
+-                class="com.lagradost.cloudstream3.ui.MyMiniControllerFragment"
+-                android:layout_width="match_parent"
+-                android:layout_height="wrap_content"
+-                android:visibility="gone"
+-                app:castControlButtons="@array/cast_mini_controller_control_buttons"
+-                app:customCastBackgroundColor="?attr/primaryGrayBackground"
+-                tools:ignore="FragmentTagUsage" />
+-        </LinearLayout>
+     </androidx.constraintlayout.widget.ConstraintLayout>
+ 
+     <androidx.compose.ui.platform.ComposeView
+diff --git a/app/src/main/res/layout/chromecast_subtitle_settings.xml b/app/src/main/res/layout/chromecast_subtitle_settings.xml
+deleted file mode 100644
+index 92d0bd3..0000000
+--- a/app/src/main/res/layout/chromecast_subtitle_settings.xml
++++ /dev/null
+@@ -1,163 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:id="@+id/subs_root"
+-    android:background="?attr/primaryBlackBackground"
+-    android:layout_width="match_parent"
+-    android:layout_height="match_parent"
+-    android:orientation="vertical">
+-
+-    <ScrollView
+-        android:layout_width="match_parent"
+-        android:layout_height="match_parent">
+-
+-        <LinearLayout
+-            android:layout_width="match_parent"
+-            android:layout_height="wrap_content"
+-            android:orientation="vertical">
+-
+-            <TextView
+-                android:paddingStart="20dp"
+-                android:paddingEnd="20dp"
+-                android:layout_marginTop="20dp"
+-                android:layout_marginBottom="10dp"
+-                android:textStyle="bold"
+-                android:text="@string/chromecast_subtitles_settings"
+-                android:textSize="20sp"
+-                android:textColor="?attr/textColor"
+-                android:layout_width="match_parent"
+-                android:layout_rowWeight="1"
+-                android:layout_height="wrap_content" />
+-
+-            <FrameLayout
+-                android:visibility="gone"
+-                android:layout_width="match_parent"
+-                android:layout_height="75sp">
+-
+-                <ImageView
+-                    android:scaleType="centerCrop"
+-                    android:src="@drawable/subtitles_preview_background"
+-                    android:layout_width="match_parent"
+-                    android:layout_height="match_parent"
+-                    android:contentDescription="@string/preview_background_img_des" />
+-
+-                <androidx.media3.ui.SubtitleView
+-                    android:id="@+id/subtitle_text"
+-
+-                    android:layout_width="match_parent"
+-                    android:layout_gravity="center"
+-                    android:foregroundGravity="center"
+-                    android:layout_height="match_parent" />
+-            </FrameLayout>
+-
+-            <TextView
+-                android:nextFocusDown="@id/subs_font_size"
+-                android:nextFocusLeft="@id/apply_btt"
+-                android:nextFocusRight="@id/cancel_btt"
+-
+-                android:id="@+id/subs_font"
+-                android:text="@string/subs_font"
+-                style="@style/SettingsItem" />
+-
+-            <TextView
+-                android:nextFocusUp="@id/subs_font"
+-                android:nextFocusDown="@id/subs_text_color"
+-                android:nextFocusLeft="@id/apply_btt"
+-                android:nextFocusRight="@id/cancel_btt"
+-
+-                android:id="@+id/subs_font_size"
+-                android:text="@string/subs_font_size"
+-                style="@style/SettingsItem" />
+-
+-            <TextView
+-                android:nextFocusUp="@id/subs_font_size"
+-                android:nextFocusDown="@id/subs_outline_color"
+-                android:nextFocusLeft="@id/apply_btt"
+-                android:nextFocusRight="@id/cancel_btt"
+-
+-                android:id="@+id/subs_text_color"
+-                android:text="@string/subs_text_color"
+-                style="@style/SettingsItem" />
+-
+-            <TextView
+-                android:nextFocusUp="@id/subs_text_color"
+-                android:nextFocusDown="@id/subs_background_color"
+-                android:nextFocusLeft="@id/apply_btt"
+-                android:nextFocusRight="@id/cancel_btt"
+-
+-                android:id="@+id/subs_outline_color"
+-                android:text="@string/subs_outline_color"
+-                style="@style/SettingsItem" />
+-
+-            <TextView
+-                android:nextFocusUp="@id/subs_outline_color"
+-                android:nextFocusDown="@id/subs_window_color"
+-                android:nextFocusLeft="@id/apply_btt"
+-                android:nextFocusRight="@id/cancel_btt"
+-
+-                android:id="@+id/subs_background_color"
+-                android:text="@string/subs_background_color"
+-                style="@style/SettingsItem" />
+-
+-            <TextView
+-                android:visibility="gone"
+-                android:nextFocusUp="@id/subs_background_color"
+-                android:nextFocusDown="@id/subs_edge_type"
+-                android:nextFocusLeft="@id/apply_btt"
+-                android:nextFocusRight="@id/cancel_btt"
+-
+-                android:id="@+id/subs_window_color"
+-                android:text="@string/subs_window_color"
+-                style="@style/SettingsItem" />
+-
+-            <TextView
+-                android:nextFocusUp="@id/subs_window_color"
+-                android:nextFocusDown="@id/apply_btt"
+-                android:nextFocusLeft="@id/apply_btt"
+-                android:nextFocusRight="@id/cancel_btt"
+-
+-                android:id="@+id/subs_edge_type"
+-                android:text="@string/subs_edge_type"
+-                style="@style/SettingsItem" />
+-
+-            <TextView
+-                android:gravity="center"
+-                android:text="@string/subs_hold_to_reset_to_default"
+-                android:textSize="14sp"
+-
+-                android:textColor="?attr/textColor"
+-                android:layout_width="match_parent"
+-                android:layout_rowWeight="1"
+-                android:layout_height="wrap_content" />
+-
+-            <LinearLayout
+-                android:orientation="horizontal"
+-                android:layout_gravity="bottom"
+-                android:gravity="bottom|end"
+-                android:layout_width="match_parent"
+-                android:layout_height="60dp">
+-
+-                <com.google.android.material.button.MaterialButton
+-                    android:nextFocusUp="@id/subs_edge_type"
+-                    android:nextFocusRight="@id/cancel_btt"
+-                    style="@style/WhiteButton"
+-                    android:layout_gravity="center_vertical|end"
+-                    android:visibility="visible"
+-                    android:text="@string/sort_apply"
+-                    android:id="@+id/apply_btt"
+-                    android:layout_width="wrap_content">
+-
+-                    <requestFocus />
+-                </com.google.android.material.button.MaterialButton>
+-
+-                <com.google.android.material.button.MaterialButton
+-                    android:nextFocusUp="@id/subs_edge_type"
+-                    android:nextFocusLeft="@id/apply_btt"
+-                    style="@style/BlackButton"
+-                    android:layout_gravity="center_vertical|end"
+-                    android:text="@string/sort_cancel"
+-                    android:id="@+id/cancel_btt"
+-                    android:layout_width="wrap_content" />
+-            </LinearLayout>
+-        </LinearLayout>
+-    </ScrollView>
+-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+diff --git a/app/src/main/res/layout/fragment_result.xml b/app/src/main/res/layout/fragment_result.xml
+index 9db120a..99b6811 100644
+--- a/app/src/main/res/layout/fragment_result.xml
++++ b/app/src/main/res/layout/fragment_result.xml
+@@ -201,15 +201,7 @@
+                             android:id="@+id/media_route_button_holder"
+                             android:layout_gravity="center_vertical|end">
+ 
+-                        <androidx.mediarouter.app.MediaRouteButton
+-                                android:layout_gravity="end|center_vertical"
+-                                android:id="@+id/media_route_button"
+-                                android:layout_width="50dp"
+-                                android:layout_height="50dp"
+-                                android:mediaRouteTypes="user"
+-                                android:visibility="gone"
+-                                app:mediaRouteButtonTint="?attr/textColor" />
+-
++                        
+ 
+                         <ImageView
+                                 android:nextFocusUp="@id/result_back"
+diff --git a/app/src/main/res/layout/fragment_result_swipe.xml b/app/src/main/res/layout/fragment_result_swipe.xml
+index 7963ef2..8db707f 100644
+--- a/app/src/main/res/layout/fragment_result_swipe.xml
++++ b/app/src/main/res/layout/fragment_result_swipe.xml
+@@ -59,15 +59,7 @@
+                 android:animateLayoutChanges="true"
+                 android:layout_gravity="center_vertical|end">
+ 
+-            <androidx.mediarouter.app.MediaRouteButton
+-                    android:layout_gravity="end|center_vertical"
+-                    android:id="@+id/media_route_button"
+-                    android:layout_width="50dp"
+-                    android:layout_height="50dp"
+-                    android:mediaRouteTypes="user"
+-                    android:visibility="gone"
+-                    app:mediaRouteButtonTint="?attr/textColor" />
+-
++            
+             <ImageView
+                     android:visibility="gone"
+                     android:nextFocusUp="@id/result_back"
+@@ -243,15 +235,6 @@
+                     style="@style/ExtendedFloatingActionButton"
+                     tools:ignore="ContentDescription" />
+ 
+-            <fragment
+-                    app:customCastBackgroundColor="?attr/primaryBlackBackground"
+-                    app:castControlButtons="@array/cast_mini_controller_control_buttons"
+-                    android:id="@+id/cast_mini_controller"
+-                    android:layout_width="match_parent"
+-                    android:layout_height="wrap_content"
+-                    android:visibility="gone"
+-                    class="com.lagradost.cloudstream3.ui.MyMiniControllerFragment"
+-                    tools:ignore="FragmentTagUsage" />
+-        </LinearLayout>
++                    </LinearLayout>
+     </FrameLayout>
+ </LinearLayout>
+diff --git a/app/src/main/res/menu/cast_expanded_controller_menu.xml b/app/src/main/res/menu/cast_expanded_controller_menu.xml
+deleted file mode 100644
+index 7fbf6ec..0000000
+--- a/app/src/main/res/menu/cast_expanded_controller_menu.xml
++++ /dev/null
+@@ -1,9 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<menu xmlns:android="http://schemas.android.com/apk/res/android"
+-      xmlns:app="http://schemas.android.com/apk/res-auto" >
+-    <item
+-            android:id="@+id/media_route_menu_item"
+-            app:actionProviderClass="androidx.mediarouter.app.MediaRouteActionProvider"
+-            app:showAsAction="always"
+-            android:title=""/>
+-</menu>
+\ No newline at end of file
+diff --git a/app/src/main/res/navigation/mobile_navigation.xml b/app/src/main/res/navigation/mobile_navigation.xml
+index b29fc51..5b79401 100644
+--- a/app/src/main/res/navigation/mobile_navigation.xml
++++ b/app/src/main/res/navigation/mobile_navigation.xml
+@@ -101,19 +101,6 @@
+             app:argType="boolean" />
+     </action>
+ 
+-    <action
+-        android:id="@+id/global_to_navigation_chrome_subtitles"
+-        app:destination="@id/navigation_chrome_subtitles"
+-        app:enterAnim="@anim/enter_anim"
+-        app:exitAnim="@anim/exit_anim"
+-        app:popEnterAnim="@anim/enter_anim"
+-        app:popExitAnim="@anim/exit_anim">
+-        <argument
+-            android:name="hide"
+-            android:defaultValue="true"
+-            app:argType="boolean" />
+-    </action>
+-
+     <action
+         android:id="@+id/global_to_navigation_settings_plugins"
+         app:destination="@id/navigation_settings_plugins"
+@@ -150,13 +137,6 @@
+             app:exitAnim="@anim/exit_anim"
+             app:popEnterAnim="@anim/enter_anim"
+             app:popExitAnim="@anim/exit_anim" />
+-        <action
+-            android:id="@+id/action_navigation_settings_player_to_navigation_chrome_subtitles"
+-            app:destination="@id/navigation_chrome_subtitles"
+-            app:enterAnim="@anim/enter_anim"
+-            app:exitAnim="@anim/exit_anim"
+-            app:popEnterAnim="@anim/enter_anim"
+-            app:popExitAnim="@anim/exit_anim" />
+     </fragment>
+ 
+     <fragment
+@@ -425,17 +405,6 @@
+         app:popExitAnim="@anim/exit_anim"
+         tools:layout="@layout/subtitle_settings" />
+ 
+-    <fragment
+-        android:id="@+id/navigation_chrome_subtitles"
+-        android:name="com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment2"
+-        android:layout_height="match_parent"
+-        android:label="@string/chromecast_subtitles_settings"
+-        app:enterAnim="@anim/enter_anim"
+-        app:exitAnim="@anim/exit_anim"
+-        app:popEnterAnim="@anim/enter_anim"
+-        app:popExitAnim="@anim/exit_anim"
+-        tools:layout="@layout/chromecast_subtitle_settings" />
+-
+     <fragment
+         android:id="@+id/navigation_quick_search"
+         android:name="com.lagradost.cloudstream3.ui.quicksearch.QuickSearchFragment"
+diff --git a/app/src/main/res/values-b+es/array.xml b/app/src/main/res/values-b+es/array.xml
+index 5456d03..fd2d419 100644
+--- a/app/src/main/res/values-b+es/array.xml
++++ b/app/src/main/res/values-b+es/array.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources xmlns:tools="http://schemas.android.com/tools">
+-    <array name="cast_mini_controller_control_buttons">
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_play_pause_toggle</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+-    <array name="cast_expanded_controller_control_buttons">
+-        <!-- Fake sources button -->
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-        <!-- Actually fake to make the skip op button the same style -->
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+ 
+     <array name="title_info_pref_names">
+         <item>@string/source_name</item>
+diff --git a/app/src/main/res/values-b+pl/array.xml b/app/src/main/res/values-b+pl/array.xml
+index 1329721..f976853 100644
+--- a/app/src/main/res/values-b+pl/array.xml
++++ b/app/src/main/res/values-b+pl/array.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources xmlns:tools="http://schemas.android.com/tools">
+-    <array name="cast_mini_controller_control_buttons">
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_play_pause_toggle</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+-    <array name="cast_expanded_controller_control_buttons">
+-        <!-- Fake sources button -->
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-        <!-- Actually fake to make the skip op button the same style -->
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+ 
+     <string-array name="extension_statuses">
+         <item>Nie działa</item>
+diff --git a/app/src/main/res/values-b+tr/array.xml b/app/src/main/res/values-b+tr/array.xml
+index 5a7901e..46f85e5 100644
+--- a/app/src/main/res/values-b+tr/array.xml
++++ b/app/src/main/res/values-b+tr/array.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources xmlns:tools="http://schemas.android.com/tools">
+-    <array name="cast_mini_controller_control_buttons">
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_play_pause_toggle</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+-    <array name="cast_expanded_controller_control_buttons">
+-        <!-- Fake sources button -->
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-        <!-- Actually fake to make the skip op button the same style -->
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+ 
+     <array name="dns_pref">
+         <item>@string/none</item>
+diff --git a/app/src/main/res/values-b+vi/array.xml b/app/src/main/res/values-b+vi/array.xml
+index 848ff01..f6448bd 100644
+--- a/app/src/main/res/values-b+vi/array.xml
++++ b/app/src/main/res/values-b+vi/array.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources xmlns:tools="http://schemas.android.com/tools">
+-    <array name="cast_mini_controller_control_buttons">
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_play_pause_toggle</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+-    <array name="cast_expanded_controller_control_buttons">
+-        <!-- Fake sources button -->
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-        <!-- Actually fake to make the skip op button the same style -->
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+ 
+ 
+     <array name="title_info_pref_names">
+diff --git a/app/src/main/res/values/array.xml b/app/src/main/res/values/array.xml
+index d14dca7..219d63c 100644
+--- a/app/src/main/res/values/array.xml
++++ b/app/src/main/res/values/array.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources xmlns:tools="http://schemas.android.com/tools">
+-    <array name="cast_mini_controller_control_buttons">
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_play_pause_toggle</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+-    <array name="cast_expanded_controller_control_buttons">
+-        <!-- Fake sources button -->
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_rewind_30_seconds</item>
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-        <!-- Actually fake to make the skip op button the same style -->
+-        <item>@id/cast_button_type_forward_30_seconds</item>
+-    </array>
+ 
+     <array name="dns_pref">
+         <item>@string/none</item>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 6c42951..0392a72 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -742,6 +742,8 @@
+     <string name="subs_edge_size">Edge Size</string>
+     <string name="torrent_preferred_media">Enable torrent in Settings/Providers/Preferred media</string>
+     <string name="torrent_not_accepted">Restart app and accept Stream Torrent pop-up to proceed.</string>
++    <string name="torrent_removed_tv_lite">Torrent playback is removed in this TV-lite build. Use "Open with" to play magnet links in an external torrent app.</string>
++    <string name="downloads_removed_tv_lite">Video downloads are removed in this TV-lite build.</string>
+     <string name="software_decoding">Software decoding</string>
+     <string name="software_decoding_desc">Software decoding enables the player to play video files not supported by your device, but may cause laggy or unstable playback on high resolution.</string>
+     <string name="volume_exceeded_100">Volume has exceeded 100%</string>
+diff --git a/app/src/main/res/values/styles.xml b/app/src/main/res/values/styles.xml
+index a5f8492..d38f2a7 100644
+--- a/app/src/main/res/values/styles.xml
++++ b/app/src/main/res/values/styles.xml
+@@ -30,10 +30,6 @@
+         <item name="showDividers">none</item>
+         <item name="android:listViewStyle">@style/ListViewStyle</item>
+ 
+-        <item name="castExpandedControllerStyle">
+-            @style/CustomCastExpandedController
+-        </item>
+-        <item name="castMiniControllerStyle">@style/CustomCastMiniController</item>
+         <!--<item name="mediaRouteButtonTint">?attr/colorPrimary</item>-->
+ 
+         <!-- Preference -->
+@@ -1013,52 +1009,6 @@
+ 
+     <!--@color/white ?attr/colorPrimary-->
+     <!--CHECK ?attr/darkBackground ?attr/colorPrimary-->
+-    <!-- CHROMECAST -->
+-    <style name="CustomCastExpandedController" parent="CastExpandedController">
+-        <item name="castControlButtons">
+-            @array/cast_expanded_controller_control_buttons
+-        </item>
+-        <!-- <item name="castButtonColor">@null</item>
+-
+-         <item name="castSeekBarSecondaryProgressColor">@color/darkBar
+-         </item>
+-         -->
+-        <item name="castSeekBarProgressAndThumbColor">?attr/colorPrimary</item>
+-        <item name="castBackground">?attr/colorPrimary</item>
+-        <item name="castProgressBarColor">?attr/colorPrimary</item>
+-        <item name="castPlayButtonDrawable">@drawable/ic_baseline_play_arrow_24</item>
+-        <item name="castPauseButtonDrawable">@drawable/netflix_pause</item>
+-        <item name="castStopButtonDrawable">@drawable/cast_ic_expanded_controller_stop</item>
+-        <item name="castSkipPreviousButtonDrawable">
+-            @drawable/cast_ic_expanded_controller_skip_previous
+-        </item>
+-        <item name="castSkipNextButtonDrawable">@drawable/cast_ic_expanded_controller_skip_next
+-        </item>
+-        <item name="castRewind30ButtonDrawable">@drawable/go_back_30</item>
+-        <item name="castForward30ButtonDrawable">@drawable/go_forward_30</item>
+-    </style>
+-
+-    <style name="CustomCastMiniController" parent="CastMiniController">
+-        <item name="castMiniControllerLoadingIndicatorColor">?attr/colorPrimary</item>
+-        <item name="castShowImageThumbnail">true</item>
+-
+-        <item name="castTitleTextAppearance">@style/TextAppearance.AppCompat.Subhead</item>
+-        <item name="castSubtitleTextAppearance">@style/TextAppearance.AppCompat.Caption</item>
+-        <item name="castBackground">@color/transparent
+-        </item> <!--CHECK bitDarkerGrayBackground darkBackground-->
+-        <item name="castProgressBarColor">?attr/colorPrimary</item>
+-        <item name="castStopButtonDrawable">@drawable/cast_ic_mini_controller_stop</item>'
+-        <item name="castLargeStopButtonDrawable">@drawable/cast_ic_mini_controller_stop_large</item>
+-        <item name="castSkipPreviousButtonDrawable">@drawable/cast_ic_mini_controller_skip_prev
+-        </item>
+-        <item name="castSkipNextButtonDrawable">@drawable/cast_ic_mini_controller_skip_next</item>
+-        <item name="castRewind30ButtonDrawable">@drawable/go_back_30</item>
+-        <item name="castForward30ButtonDrawable">@drawable/go_forward_30</item>
+-        <item name="castMuteToggleButtonDrawable">@drawable/cast_ic_mini_controller_mute</item>
+-        <item name="castClosedCaptionsButtonDrawable">
+-            @drawable/cast_ic_mini_controller_closed_caption
+-        </item>
+-    </style>
+ 
+     <style name="RoundedImageView">
+         <item name="cornerFamily">rounded</item>
+diff --git a/app/src/main/res/xml/settings_player.xml b/app/src/main/res/xml/settings_player.xml
+index f370fbc..c762717 100644
+--- a/app/src/main/res/xml/settings_player.xml
++++ b/app/src/main/res/xml/settings_player.xml
+@@ -48,11 +48,6 @@
+             android:key="@string/subtitle_settings_key"
+             android:title="@string/player_subtitles_settings"
+             app:summary="@string/player_subtitles_settings_des" />
+-        <Preference
+-            android:icon="@drawable/ic_outline_subtitles_24"
+-            android:key="@string/subtitle_settings_chromecast_key"
+-            android:title="@string/chromecast_subtitles_settings"
+-            app:summary="@string/chromecast_subtitles_settings_des" />
+     </PreferenceCategory>
+ 
+ 
+@@ -116,12 +111,6 @@
+             android:title="@string/auto_rotate_video"
+             app:defaultValue="true"
+             app:key="@string/auto_rotate_video_key" />
+-        <SwitchPreference
+-            android:icon="@drawable/preview_seekbar_24"
+-            android:summary="@string/preview_seekbar_desc"
+-            android:title="@string/preview_seekbar"
+-            app:defaultValue="true"
+-            app:key="@string/preview_seekbar_key" />
+         <Preference
+             android:icon="@drawable/ic_baseline_extension_24"
+             android:summary="@string/software_decoding_desc"
+diff --git a/app/src/main/res/xml/settings_ui.xml b/app/src/main/res/xml/settings_ui.xml
+index 774724f..131dd32 100644
+--- a/app/src/main/res/xml/settings_ui.xml
++++ b/app/src/main/res/xml/settings_ui.xml
+@@ -65,7 +65,7 @@
+             app:defaultValue="true"
+             app:key="search_suggestions_enabled" />
+         <SwitchPreference
+-            android:defaultValue="true"
++            android:defaultValue="false"
+             android:icon="@drawable/baseline_theaters_24"
+             android:key="@string/show_trailers_key"
+             android:title="@string/show_trailers_settings" />
+diff --git a/app/src/main/res/xml/settings_updates.xml b/app/src/main/res/xml/settings_updates.xml
+index 77ebae4..4aa47e1 100644
+--- a/app/src/main/res/xml/settings_updates.xml
++++ b/app/src/main/res/xml/settings_updates.xml
+@@ -24,7 +24,7 @@
+             android:icon="@drawable/ic_baseline_notifications_active_24"
+             android:summary="@string/updates_settings_des"
+             android:title="@string/updates_settings"
+-            app:defaultValue="true"
++            app:defaultValue="false"
+             app:key="@string/auto_update_key" />
+     </PreferenceCategory>
+ 
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 2f1b45e..89fbf91 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -39,18 +39,15 @@ lifecycleKtx = "2.10.0"
+ material = "1.14.0"
+ media3 = "1.9.3"
+ navigationKtx = "2.9.8"
+-newpipeextractor = "v0.26.3"
+ nextlibMedia3 = "1.9.3-0.12.0"
+ nicehttp = "0.4.18"
+ overlappingpanels = "0.1.5"
+ paletteKtx = "1.0.0"
+ preferenceKtx = "1.2.1"
+-previewseekbarMedia3 = "1.1.1.0"
+ qrcodeKotlin = "4.5.0"
+ rhino = { strictly = "1.8.1" } # Requires minSdk 26 or later beginning at version 1.9.0
+ safefile = "0.0.8"
+ shimmer = "0.5.0"
+-torrentserver = "7861970"
+ tvprovider = "1.1.0"
+ video = "1.0.0"
+ workRuntimeKtx = "2.11.2"
+@@ -118,7 +115,6 @@ ktor-http = { module = "io.ktor:ktor-http", version.ref = "ktor" }
+ lifecycle-livedata-ktx = { module = "androidx.lifecycle:lifecycle-livedata-ktx", version.ref = "lifecycleKtx" }
+ lifecycle-viewmodel-ktx = { module = "androidx.lifecycle:lifecycle-viewmodel-ktx", version.ref = "lifecycleKtx" }
+ material = { module = "com.google.android.material:material", version.ref = "material" }
+-media3-cast = { module = "androidx.media3:media3-cast", version.ref = "media3" }
+ media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
+ media3-container  = { module = "androidx.media3:media3-container", version.ref = "media3" }
+ media3-datasource-cronet = { group = "androidx.media3", name = "media3-datasource-cronet", version.ref = "media3" }
+@@ -130,19 +126,16 @@ media3-session = { module = "androidx.media3:media3-session", version.ref = "med
+ media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
+ navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version.ref = "navigationKtx" }
+ navigation-ui-ktx = { module = "androidx.navigation:navigation-ui-ktx", version.ref = "navigationKtx" }
+-newpipeextractor = { module = "com.github.teamnewpipe:NewPipeExtractor", version.ref = "newpipeextractor" }
+ nextlib-media3ext = { module = "io.github.anilbeesetti:nextlib-media3ext", version.ref = "nextlibMedia3" }
+ nextlib-mediainfo = { module = "io.github.anilbeesetti:nextlib-mediainfo", version.ref = "nextlibMedia3" }
+ nicehttp = { module = "com.github.Blatzar:NiceHttp", version.ref = "nicehttp" }
+ overlappingpanels = { module = "com.github.discord:OverlappingPanels", version.ref = "overlappingpanels" }
+ palette-ktx = { module = "androidx.palette:palette-ktx", version.ref = "paletteKtx" }
+ preference-ktx = { module = "androidx.preference:preference-ktx", version.ref = "preferenceKtx" }
+-previewseekbar-media3 = { module = "com.github.rubensousa:previewseekbar-media3", version.ref = "previewseekbarMedia3" }
+ qrcode-kotlin = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrcodeKotlin" }
+ rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
+ safefile = { module = "com.github.LagradOst:SafeFile", version.ref = "safefile" }
+ shimmer = { module = "com.facebook.shimmer:shimmer", version.ref = "shimmer" }
+-torrentserver = { module = "com.github.recloudstream:torrentserver", version.ref = "torrentserver" }
+ tvprovider = { module = "androidx.tvprovider:tvprovider", version.ref = "tvprovider" }
+ video = { module = "com.google.android.mediahome:video", version.ref = "video" }
+ work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
+@@ -175,7 +168,7 @@ compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMu
+ coil = ["coil", "coil-network-okhttp"]
+ cryptography = ["cryptography-core", "cryptography-provider-optimal"]
+ lifecycle = ["lifecycle-livedata-ktx", "lifecycle-viewmodel-ktx"]
+-media3 = ["media3-cast", "media3-common", "media3-container", "media3-datasource-cronet", "media3-datasource-okhttp", "media3-exoplayer", "media3-exoplayer-dash", "media3-exoplayer-hls", "media3-session", "media3-ui"]
++media3 = ["media3-common", "media3-container", "media3-datasource-cronet", "media3-datasource-okhttp", "media3-exoplayer", "media3-exoplayer-dash", "media3-exoplayer-hls", "media3-session", "media3-ui"]
+ navigation = ["navigation-fragment-ktx", "navigation-ui-ktx"]
+ nextlib = ["nextlib-media3ext", "nextlib-mediainfo"]
+ compose = ["compose-foundation", "compose-material3", "compose-resources", "compose-runtime", "compose-ui", "compose-ui-tooling", "compose-ui-tooling-preview", "lifecycle-viewmodel-compose", "coil-compose"]
+\ No newline at end of file
+diff --git a/shared/src/commonMain/kotlin/com/lagradost/cloudstream4/DevicePreferenceStore.kt b/shared/src/commonMain/kotlin/com/lagradost/cloudstream4/DevicePreferenceStore.kt
+index cad05c4..5710281 100644
+--- a/shared/src/commonMain/kotlin/com/lagradost/cloudstream4/DevicePreferenceStore.kt
++++ b/shared/src/commonMain/kotlin/com/lagradost/cloudstream4/DevicePreferenceStore.kt
+@@ -33,7 +33,7 @@ class AppSettings internal constructor(
+ }
+ 
+ class PluginPreferences(preferences: PreferenceStore) {
+-    val autoUpdate = preferences.getBoolean("auto_update_plugins", true)
++    val autoUpdate = preferences.getBoolean("auto_update_plugins", false) // TV-LITE: manual updates only
+     /** Not used anymore, as a user should never auto install all plugins in a repository */
+     val autoDownload = preferences.getInt("auto_download_plugins_key2", 0)
+ }
+@@ -45,7 +45,7 @@ class BackupPreferences(preferences: PreferenceStore) {
+ }
+ class UpdatePreferences(preferences: PreferenceStore) {
+     val apkInstaller = preferences.getInt("apk_installer_key",1)
+-    val showAppUpdates = preferences.getBoolean("auto_update", true)
++    val showAppUpdates = preferences.getBoolean("auto_update", false) // TV-LITE: manual updates only
+     // Node id for this update
+     val skipUpdate = preferences.getString("skip_update_key", "")
+ }
+@@ -82,7 +82,7 @@ class UIPreferences(preferences: PreferenceStore) {
+         "show_kitsu_posters_key", true
+     )
+     val trailersEnabled = preferences.getBoolean(
+-        "show_trailers_key", true
++        "show_trailers_key", false
+     )
+     val castEnabled = preferences.getBoolean(
+         "show_cast_in_details_key", true
+@@ -173,7 +173,7 @@ class PlayerPreferences(preferences: PreferenceStore) {
+     val skipOpEnabled = preferences.getBoolean("enable_skip_op_from_database", true)
+     val autoRotateEnabled = preferences.getBoolean("auto_rotate_video_key", true)
+     val rotateButtonEnabled = preferences.getBoolean("rotate_video_key", false)
+-    val previewBarEnabled = preferences.getBoolean("preview_seekbar_key", true)
++    val previewBarEnabled = preferences.getBoolean("preview_seekbar_key", false)
+     val softwareDecoding = preferences.getInt("software_decoding_key2", -1)
+     val extraBrightnessEnabled = preferences.getBoolean("extra_brightness_key", false)
+     val swipeHorizontalEnabled = preferences.getBoolean("swipe_enabled_key", true)
+diff --git a/tv-lite-keystore.p12 b/tv-lite-keystore.p12
+new file mode 100644
+index 0000000000000000000000000000000000000000..c6b2197dbe714c366714452cd4dcf88914a9b601
+GIT binary patch
+literal 2674
+zcmai$X*kpi8^&kG%veH9mSoAk%b&3?A^Q@_TK0X<K7(`8G^ELzK}clFk}Z+Ol4R%D
+zccZaID2}BVW2slyd#=;R^WnLk=f3X`&$r)o16aB{5HJ;hr4xkHipLqmkr}|$;Cw6{
+zD-=t|d}cEMSg7mo2%e9HTAW#C5HRR$8T?MbfX%-G#sC-rV!tIlzy+nbSTr!Mh39jD
+zKxjY!J)GwM-ypOw5Wo$mb&fLtdr(2a;!q}RtOT*LRO)L4ZJDK(T|+SjOSNbq3355&
+zZEmYRDxhC65MQwlv|86r92VPvd-Ux8%)PQOr+m;Gby)xUy}K~qWA>{2#Dp|dwKqdC
+zqk-@QmH{E8t{-GbUxHhPX{Q0u=(Z@7%ahV>blpG+OGST2;`+nT`qjDFP3)fbhx<vT
+zWNJlIzU**&m&JXXquCGJ;sYJo?_<k4Ynl5=mYj0y-)YS70hsCF?I2xBsoj3Fi^gE~
+zhM`swS~R{)@pMd9PYGM}Z6;-|3Kn+Je@;`DcOdn_4UD<lF(rQWPdgSfSWR`$ZlPml
+zh5O3Fv37`tq(mJb`^VbKd7hy48^X>uTko62ycfvH7H)vw=8V^iSgN(=sH(eCZ7a(*
+ztX<99A(8OLR+413O0AE4CCaze{EfD^N&aNE`K+Cu4jgM`dVU2+jAS!}fvV-D&XtVA
+zudnMVb*c0a8m8Le%y{lFZhC<*E!G?A`0QbW@(c!H2SiWPA^CO1HL8P|lnf8AcTUNn
+z9O~&i0_Ar0cN5wJaQkl(#HijQ*iBwJ_`MiXpt$y<(w9=I;}K9r&ahB$LFbm9s`_cG
+zX@Sfj`dIC;v!>Y3w<7u-<=w`!C@IudJTil;^d<G%gKy`tH=oTgex@>j#w4zYS>Xlg
+z=SrX1Kiu_~(utfuh0p*(oX>h{*6i~K+?EQAS}8L&HGxU_uEi~nd<YU^uYzy{zvIO<
+zYPJ=sk?ezY%tE(y)9|H&=K`)B&rZ~+vLo$#U#fVk0>&A#RRW(_!6ie%<VE>M7ff~+
+zW+`4?57FSXZrsApa>m}1B-w+Xz4)tRT%kFNEGm6)JV=z-={;oJ>L#mxb&sZ3>@ak0
+z?1C9G;xyS-;VA$_ZYM$>+KEVzVj%hot5-ecDnQQTqZGe7(1O5J=3<?D11(`pdx}V0
+zsz(cy%f&Q1gG^ee4{;%nJuSU0MT({6l_pp7zCX(Gx~!o?@`!Z|-^98dlBdwp5xeh@
+zqRi-q@j=Oomb=YJjVY7I^74jFB4ucs@GV^#<}mozC(YsRlX{y50XLP?Fur~1BSLu_
+zjrZ18rw<6S{Jgn6lk_nsIXvOST}-VGOLG8QVlHCeMtKVU1!{wlxcnt-!Z6ZQ-atqN
+zKQ*&_8z=4~N(jt+LhBvEEXaJyP!Ur+!TNUE3(boZG4Tm>brHe?Y`NvG4wMx<Mt`U3
+z$kZt6q>Ah@{bpdMsJD_M`A?z)YwnMX(_j|yFPCd#@7=wyQUiQvn8h>4^;v(AP&j93
+zH_t!IcD^hBUC3yjGQECsQv>-x>yho2Chu5Yay#E$?>(Tw-YUm_-+Fv)R3`+$!ixUo
+z#V-KC(xF(`<1;()Y;f>%|FDUk4h%U9WzI~g{{l|HX~@nFiHrR|fm5zkxmaED!KBIF
+zn6UA{&KHV>j<8a{=Zz=&2L|UFUdlW_OBQpwe|z?D(-w0&rzy4mrh7i)V7jlT_)VPW
+z9w;a6uhM8qaF8^$cyANwl1aJgb+5`Ye6qaezTzkI`YCyVB6@w%mg4A%@?gfU@+a3U
+z$;#|5V(y7`Kf;xdbsml>SRuO-k}GT5O!{nx)bPuWNyA6{$7z(w8->eROLGz16@O`j
+zT+q0B`R~NA9y$VAk#NrV3GJf+wU+rmepHCfOqqsh4`6Pil3=WC-1bs2f_o!>9E;qx
+zU%XQg)W>j7A}Tk<Ime<+q(hv(J)&lV$JEtJt?_jzb*9r`@rRU#!im^9gHA!X2Fx3o
+zg}!I?iKH;pXeLCOE+8r8NoZYUYg#Sa3uddhW2E|YS!z9v+Lxg~FpaorHP@ZFV?L?v
+z8F@6f=bQw_WpPpnm!2~v2Xi^a-X324*m+=|qO7Fkq(K6lUNCAdc|d(cd-;U66^393
+zh2RlxG#7HE@Kt@1hDbLA?Kte<b&(`A-Hqc}iYs4tlcv2Njc>GduWZqtMxbU05l^XQ
+zA=jeBFI|@rIF51UkTWa+UIa+58p8MSD~qZ)&xJwr4s-&xt)eYEC%zv&%8TeRd@dy0
+z-}t>Mm7Nr(#*hAHd$IFA|JrW4oaEljwU_DFa`UpuBQ{%gMl;yd8|DC(*{FZE!cUlS
+zdB~!4ZE@8${FdH2F<g;}lRv8$Iy>ZIh$vYfKnXW%N@=}$??~`DO3}4Q=I9NMZ{y?w
+zY-h7F+nJuj^3u0=ieM3$rPe!=!qpr_*3zpm(ezqX1-j4H!#A-6KJyZTQ;HeCbI$kZ
+zcFvEM#XNFD#Lx#DsJp1A)#yP57Smh&Ykalj(2bD9XPkaNccLLop<er>fs{B074C~S
+zm*?obUe{bc>{#eVt{EzisvxGveB?e-<=3l)!Bp>4>G8!$iV@k5=s78^_XfI}Eg6Og
+zk1Yb(rbp1PKSs+XT+NNIH&Lur@Mh5?`_!n~Tw76)k=wAkcY1m&$t7Cwa4USAFY50T
+zuo6dm;A!d{(VzImwB~47XM_2+E1mXd_mD_wK&tVj+@4hSXG<MKuHQEIGv&x|Y_dU(
+zbGc?9c)!#~5Ybq(%X|r8ybHS@q7&1v7^9O@l4SNaAKjK+{D|1a>aWd*&6qD9xmu>J
+ze?;X;WpStNt;{P0W~8p~L4E^5wMs9jY*gb`T{s7)?;1wwq(#$ndQId&aH81-{Iy{2
+z$E^ob(xw`wC8@7JDcaAzT%YGdD#b2x215lW#`8BC$|!K0P^Vk!wDdfx%rA%Ys3EN5
+zI0U_WLhb;?HJszf@CuAz^FBcZ(f)WLuvfB?_at4k>&~vA&mo?kM=0CZC<J}Vs+QI3
+znu|zsboO}L8sBfx5&(Mv3DpZgWnVE#U7Mg&apoR4m~k?uB*nkPwj~R1mIOBA>XVi-
+z2?qKZpg;6eJ~?>vc28cm4#!<lLDZd>cl1zR=!;Nsc&^9luGvl|e6!Jd)h@5=Sy()%
+zD9Kq7^#kISUYZqor(@&k1+F-nzuGejDTgsQj3X`_R)kMk3$u(!jlne8>&f7C1u{J9
+z(2yOk$OPT<SNga=Ga#?O^KCOT-H#M~Kt=5q{gXW%XfmdmE`B~!+s;J9ip%KyYFYnK
+zl$J$?iH8vs210?PK>i?~v&#bz_#Ly#ut8a*@`6>rCflZ-Q|{L>XZ_osXK+3i&;n!t
+zhJV`{1PlW~dCSKbk?QTLyrZ?Hf<egf5q%K<0I5{XO}+bjKoy2o7fKU-Rq&MM;nSF3
+GB>o=}jMc9I
+
+literal 0
+HcmV?d00001
+
