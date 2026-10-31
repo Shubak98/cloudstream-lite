@@ -601,7 +601,6 @@ class CS3IPlayer : IPlayer {
 
     private fun releasePlayer(saveTime: Boolean = true) {
         Log.i(TAG, "releasePlayer")
-        eventLooperIndex += 1
         if (saveTime)
             updatedTime()
 

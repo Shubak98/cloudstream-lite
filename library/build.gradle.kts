@@ -77,8 +77,7 @@ kotlin {
             dependsOn(commonMain.get())
             dependencies {
                 implementation(libs.kotlin.reflect)
-    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.2")
-                implementation(libs.newpipeextractor)
+                implementation("com.github.teamnewpipe:NewPipeExtractor:v0.26.3")
             }
         }
 
